@@ -6,14 +6,19 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 /// @title MockUSDC
 /// @notice Mintable test token for GradPad on Base mainnet.
 /// @dev Public mint capped at 1000 tokens per address per day.
-///      Uses 18 decimals (not 6 like real USDC) for consistency with the rest of the system.
+///      Uses 6 decimals to match real USDC.
 contract MockUSDC is ERC20 {
-    uint256 public constant DAILY_LIMIT = 1000 ether; // 1000 mUSDC
+    uint256 public constant DAILY_LIMIT = 1000 * 10 ** 6; // 1000 mUSDC (6 decimals)
 
     mapping(address => uint256) private _lastMintDay;
     mapping(address => uint256) private _mintedToday;
 
     constructor() ERC20("Mock USDC", "mUSDC") {}
+
+    /// @inheritdoc ERC20
+    function decimals() public pure override returns (uint8) {
+        return 6;
+    }
 
     /// @notice Mint up to 1000 mUSDC per day. Resets at UTC midnight.
     function mint(uint256 amount) external {
