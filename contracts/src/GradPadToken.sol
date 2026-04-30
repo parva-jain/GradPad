@@ -86,13 +86,45 @@ contract GradPadToken is ERC20, ReentrancyGuard {
         _;
     }
 
+    // ============ BUCKET VALIDATION ============
+
+    /// @notice Enforces invariants on a bucket array before it is stored.
+    ///         Rules:
+    ///           1. At least 1, at most 10 buckets.
+    ///           2. basisPoints across all buckets must sum to exactly 10 000.
+    ///           3. Exactly one bucket may have isLiquidity = true.
+    ///           4. Every non-liquidity bucket must have a non-zero recipient.
+    /// @dev Pure function — no state reads. Called once at initialization.
+    function _validateBuckets(Bucket[] memory _buckets) internal pure {
+        require(
+            _buckets.length >= 1 && _buckets.length <= 10,
+            "GradPad: invalid bucket count"
+        );
+
+        uint256 total;
+        uint256 liquidityCount;
+
+        for (uint256 i = 0; i < _buckets.length; i++) {
+            total += _buckets[i].basisPoints;
+
+            if (_buckets[i].isLiquidity) {
+                liquidityCount++;
+            } else {
+                require(_buckets[i].recipient != address(0), "GradPad: zero recipient");
+            }
+        }
+
+        require(total == BASIS_POINTS, "GradPad: buckets must sum to 100%");
+        require(liquidityCount == 1, "GradPad: exactly one liquidity bucket");
+    }
+
     // ============ INITIALIZATION ============
 
     /// @notice One-shot initializer called by GradPadFactory immediately after clone deployment.
     /// @param name_         Token name.
     /// @param symbol_       Token symbol.
     /// @param totalSupply_  Total token supply (in wei, 18 decimals).
-    /// @param _buckets      Allocation array. Must pass _validateBuckets (added in Task 5).
+    /// @param _buckets      Allocation array. Validated by _validateBuckets before storing.
     /// @param factory_      Factory address — becomes the sole privileged caller.
     function initialize(
         string memory name_,
@@ -110,7 +142,8 @@ contract GradPadToken is ERC20, ReentrancyGuard {
         totalTokenSupply = totalSupply_;
         bondingPhase  = true;
 
-        // Store buckets (validation added in Task 5 via _validateBuckets call here).
+        // Validate before storing — bad arrays revert here.
+        _validateBuckets(_buckets);
         for (uint256 i = 0; i < _buckets.length; i++) {
             buckets.push(_buckets[i]);
         }
