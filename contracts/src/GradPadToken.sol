@@ -200,9 +200,37 @@ contract GradPadToken is ERC20, ReentrancyGuard {
         bondingPhase = false;
     }
 
-    // ============ CLAIMING (implemented in Task 6) ============
-    //
-    // claimBucket(uint256 bucketIndex) — will be added after TDD in Task 6.
+    // ============ CLAIMING ============
+
+    /// @notice Claim vested tokens from a non-liquidity bucket.
+    ///         Cliff and linear vesting are measured from graduationTimestamp.
+    /// @param bucketIndex Index into the buckets array.
+    function claimBucket(uint256 bucketIndex) external nonReentrant {
+        require(graduationTimestamp > 0, "GradPad: not graduated");
+        require(bucketIndex < buckets.length, "GradPad: invalid bucket");
+        Bucket memory bucket = buckets[bucketIndex];
+        require(!bucket.isLiquidity, "GradPad: cannot claim liquidity");
+        require(msg.sender == bucket.recipient, "GradPad: not recipient");
+
+        uint256 elapsed = block.timestamp - graduationTimestamp;
+        require(elapsed >= bucket.cliff, "GradPad: cliff not elapsed");
+
+        uint256 bucketTokens = (totalTokenSupply * bucket.basisPoints) / BASIS_POINTS;
+        uint256 vestingElapsed = elapsed - bucket.cliff;
+        uint256 claimable;
+
+        if (bucket.vestingDuration == 0 || vestingElapsed >= bucket.vestingDuration) {
+            claimable = bucketTokens - claimedPerBucket[bucketIndex];
+        } else {
+            claimable = (bucketTokens * vestingElapsed / bucket.vestingDuration)
+                        - claimedPerBucket[bucketIndex];
+        }
+
+        require(claimable > 0, "GradPad: nothing to claim");
+        claimedPerBucket[bucketIndex] += claimable;
+        _transfer(address(this), msg.sender, claimable);
+        emit BucketClaimed(bucketIndex, msg.sender, claimable);
+    }
 
     // ============ VIEW HELPERS ============
 
