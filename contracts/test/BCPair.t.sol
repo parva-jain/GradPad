@@ -116,12 +116,13 @@ contract BCPairTest is Test {
 
         // State after buy: reserve0=909091, reserve1=11000, real token1=1000
         // Now sell tokensOut back
-        uint256 tokenIn  = tokensOut; // 90909
-        // newR0 = 909091 + 90909 = 1_000_000
-        // k after buy ≈ 10_000_001_000
-        // newR1 = ceil(10_000_001_000 / 1_000_000) = 10001
-        // assetOut = 11000 - 10001 = 999
-        uint256 assetOut = 999;
+        uint256 tokenIn = tokensOut; // 90909
+
+        // Compute expected assetOut from post-buy pool state
+        BCPair.Pool memory poolAfterBuy = pair.getPool();
+        uint256 newR0 = poolAfterBuy.reserve0 + tokenIn;
+        uint256 newR1 = (poolAfterBuy.k + newR0 - 1) / newR0; // ceiling div
+        uint256 assetOut = poolAfterBuy.reserve1 - newR1;
 
         token0.mint(address(pair), tokenIn); // router pre-transfer
         uint256 aliceBefore = token1.balanceOf(address(0xA11CE));
