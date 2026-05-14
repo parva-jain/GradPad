@@ -104,10 +104,11 @@ contract BCRouterTest is Test {
 
     function test_buy_emits_Buy_event() public {
         uint256 assetIn = 500;
+        uint256 expectedOut = router.getTokensOut(address(token), address(asset), assetIn);
         asset.mint(address(this), assetIn);
         asset.approve(address(router), assetIn);
-        vm.expectEmit(true, true, false, false);
-        emit BCRouter.Buy(pair, address(this), assetIn, 0);
+        vm.expectEmit(true, true, false, true);
+        emit BCRouter.Buy(pair, address(this), assetIn, expectedOut);
         router.buy(address(token), address(asset), assetIn, address(this), 0);
     }
 
@@ -189,13 +190,14 @@ contract BCRouterTest is Test {
 
     // ─── Unit: buy-sell round trip ─────────────────────────────────────────────
 
-    function test_buy_sell_roundtrip_loses_small_amount() public {
+    function test_buy_sell_roundtrip_returns_less_than_in() public {
         uint256 assetIn   = 2_000;
         uint256 tokensOut = _doBuy(assetIn);
         token.approve(address(router), tokensOut);
         uint256 assetBack = router.sell(address(token), address(asset), tokensOut, address(this), 0);
-        assertLe(assetBack, assetIn);
+        assertLe(assetBack, assetIn);   // must not exceed amount in
         assertGt(assetBack, 0);
+        assertGe(assetBack, assetIn * 99 / 100); // within 1% slippage for this pool size
     }
 
     // ─── Unit: withdrawBondingCurveLiquidity ───────────────────────────────────
@@ -271,9 +273,9 @@ contract BCRouterTest is Test {
 
     // ─── Fuzz: sell k-invariant ────────────────────────────────────────────────
 
-    function test_fuzz_sell_k_never_decreases(uint64 tokenIn) public {
+    function test_fuzz_sell_k_never_decreases(uint32 tokenIn) public {
         uint256 tokensReceived = _doBuy(5_000);
-        vm.assume(tokenIn > 0 && tokenIn <= tokensReceived);
+        vm.assume(tokenIn > 0 && uint256(tokenIn) <= tokensReceived);
 
         BCPair.Pool memory before = BCPair(pair).getPool();
         uint256 newR0 = before.reserve0 + tokenIn;
@@ -387,5 +389,10 @@ contract BCRouterInvariantTest is Test {
 
     function invariant_asset_reserve_positive() public view {
         assertGt(BCPair(pair).getPool().reserve1, 0, "asset reserve must be positive");
+    }
+
+    function invariant_reserves_product_ge_k() public view {
+        BCPair.Pool memory pool = BCPair(pair).getPool();
+        assertGe(pool.reserve0 * pool.reserve1, pool.k, "reserve product must not fall below k");
     }
 }
