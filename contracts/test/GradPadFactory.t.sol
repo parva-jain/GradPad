@@ -124,15 +124,15 @@ contract GradPadFactoryTest is Test {
     }
 
     function test_createGradPad_emits_GradPadCreated() public {
-        vm.expectEmit(false, true, false, false);
+        vm.expectEmit(false, true, false, true);
         emit GradPadFactory.GradPadCreated(address(0), address(this), "Grad", "G", SUPPLY);
         factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
     }
 
     function test_createGradPad_emits_BucketAdded_for_each_bucket() public {
-        vm.expectEmit(false, true, false, false);
+        vm.expectEmit(false, true, false, true);
         emit GradPadFactory.BucketAdded(address(0), 0, "Liquidity", 7000, address(0), 0, 0, true);
-        vm.expectEmit(false, true, false, false);
+        vm.expectEmit(false, true, false, true);
         emit GradPadFactory.BucketAdded(address(0), 1, "Team", 3000, address(0xBEEF), 30 days, 90 days, false);
         factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
     }
@@ -168,6 +168,7 @@ contract GradPadFactoryTest is Test {
 // Fork tests — graduation via real Uniswap V2 on Base mainnet
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// forge-config: default.fuzz.runs = 16
 contract GradPadFactoryForkTest is Test {
     // Real Uniswap V2 factory on Base mainnet (the router resolves to this internally)
     address constant UNISWAP_V2_FACTORY = 0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6;
@@ -183,7 +184,7 @@ contract GradPadFactoryForkTest is Test {
     uint256 constant SUPPLY          = 1_000_000 ether;
 
     function setUp() public {
-        vm.createSelectFork(vm.envString("BASE_RPC_URL"));
+        vm.createSelectFork(vm.envString("BASE_RPC_URL"), 29_000_000);
 
         usdc = new MockToken("USDC", "USDC", 6);
 
