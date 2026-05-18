@@ -82,8 +82,12 @@ contract GradPadToken is ERC20, ReentrancyGuard {
     // ============ MODIFIERS ============
 
     modifier onlyFactory() {
-        if (msg.sender != factory) revert Unauthorized();
+        _onlyFactory();
         _;
+    }
+
+    function _onlyFactory() internal view {
+        if (msg.sender != factory) revert Unauthorized();
     }
 
     // ============ BUCKET VALIDATION ============
@@ -172,7 +176,7 @@ contract GradPadToken is ERC20, ReentrancyGuard {
     /// @dev    Called by factory after creating the BCPair. Finds the isLiquidity bucket,
     ///         computes its token amount, and transfers it directly to `bcPair`.
     /// @param bcPair The bonding curve pair that will hold the tokens during bonding phase.
-    function transferLiquidityToBCPair(address bcPair) external onlyFactory {
+    function transferLiquidityToBcPair(address bcPair) external onlyFactory {
         for (uint256 i = 0; i < buckets.length; i++) {
             if (buckets[i].isLiquidity) {
                 uint256 amount = (totalTokenSupply * buckets[i].basisPoints) / BASIS_POINTS;

@@ -51,8 +51,12 @@ contract BCPair {
     // ============ MODIFIERS ============
     
     modifier onlyRouter() {
-        if (msg.sender != router) revert OnlyRouter();
+        _onlyRouter();
         _;
+    }
+
+    function _onlyRouter() internal view {
+        if (msg.sender != router) revert OnlyRouter();
     }
     
     

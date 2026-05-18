@@ -14,7 +14,7 @@ interface IGradPadToken {
         address factory_
     ) external;
 
-    function transferLiquidityToBCPair(address bcPair) external;
+    function transferLiquidityToBcPair(address bcPair) external;
 
     function graduate() external;
 

@@ -22,12 +22,12 @@ contract GradPadFactory is Ownable {
 
     // ============ IMMUTABLES ============
 
-    address public immutable tokenImplementation;
-    address public immutable bcRouter;
-    address public immutable bcPairFactory;
-    address public immutable uniswapV2Factory;
-    address public immutable uniswapV2Router;
-    address public immutable assetToken;
+    address public immutable TOKEN_IMPLEMENTATION;
+    address public immutable BC_ROUTER;
+    address public immutable BC_PAIR_FACTORY;
+    address public immutable UNISWAP_V2_FACTORY;
+    address public immutable UNISWAP_V2_ROUTER;
+    address public immutable ASSET_TOKEN;
 
     // ============ STATE ============
 
@@ -93,12 +93,12 @@ contract GradPadFactory is Ownable {
             assetToken_       == address(0)
         ) revert ZeroAddress();
 
-        tokenImplementation = tokenImpl_;
-        bcRouter            = bcRouter_;
-        bcPairFactory       = bcPairFactory_;
-        uniswapV2Factory    = uniswapV2Factory_;
-        uniswapV2Router     = uniswapV2Router_;
-        assetToken          = assetToken_;
+        TOKEN_IMPLEMENTATION = tokenImpl_;
+        BC_ROUTER            = bcRouter_;
+        BC_PAIR_FACTORY      = bcPairFactory_;
+        UNISWAP_V2_FACTORY   = uniswapV2Factory_;
+        UNISWAP_V2_ROUTER    = uniswapV2Router_;
+        ASSET_TOKEN          = assetToken_;
     }
 
     // ============ CORE FUNCTIONS ============
@@ -123,13 +123,13 @@ contract GradPadFactory is Ownable {
         bytes32 salt
     ) external returns (address token) {
         // 1. Deploy clone
-        token = Clones.cloneDeterministic(tokenImplementation, salt);
+        token = Clones.cloneDeterministic(TOKEN_IMPLEMENTATION, salt);
 
         // 2. Initialize: validates Bucket[], mints entire supply to the token contract
         IGradPadToken(token).initialize(name, symbol, totalSupply, _buckets, address(this));
 
         // 3. Create BCPair
-        address pair = IBCPairFactory(bcPairFactory).createPair(token, assetToken);
+        address pair = IBCPairFactory(BC_PAIR_FACTORY).createPair(token, ASSET_TOKEN);
         tokenToPair[token]         = pair;
         graduationThreshold[token] = graduationThreshold_;
         virtualAssetReserve[token] = virtualAssetReserve_;
@@ -138,9 +138,9 @@ contract GradPadFactory is Ownable {
         // 4. Pull liquidity-bucket tokens from token contract to this factory,
         //    then use BCRouter (which needs them from the caller) to set initial reserves.
         uint256 liquidityAmount = _liquidityTokenAmount(totalSupply, _buckets);
-        IGradPadToken(token).transferLiquidityToBCPair(address(this)); // sends to factory
-        IERC20(token).forceApprove(bcRouter, liquidityAmount);
-        IBCRouter(bcRouter).addInitialLiquidity(token, assetToken, liquidityAmount, virtualAssetReserve_);
+        IGradPadToken(token).transferLiquidityToBcPair(address(this)); // sends to factory
+        IERC20(token).forceApprove(BC_ROUTER, liquidityAmount);
+        IBCRouter(BC_ROUTER).addInitialLiquidity(token, ASSET_TOKEN, liquidityAmount, virtualAssetReserve_);
 
         emit GradPadCreated(token, msg.sender, name, symbol, totalSupply);
         _emitBucketAdded(token, _buckets);
@@ -168,17 +168,17 @@ contract GradPadFactory is Ownable {
         if (assetBal < graduationThreshold[token]) revert ThresholdNotMet();
 
         // Withdraw all token + USDC from BCPair to this factory
-        IBCRouter(bcRouter).withdrawBondingCurveLiquidity(token, assetToken);
+        IBCRouter(BC_ROUTER).withdrawBondingCurveLiquidity(token, ASSET_TOKEN);
 
         uint256 tokenBal = IERC20(token).balanceOf(address(this));
-        uint256 assetBalance = IERC20(assetToken).balanceOf(address(this));
+        uint256 assetBalance = IERC20(ASSET_TOKEN).balanceOf(address(this));
 
         // Seed Uniswap V2; LP tokens permanently locked to address(1)
-        IERC20(token).forceApprove(uniswapV2Router, tokenBal);
-        IERC20(assetToken).forceApprove(uniswapV2Router, assetBalance);
-        IUniswapV2Router02(uniswapV2Router).addLiquidity(
+        IERC20(token).forceApprove(UNISWAP_V2_ROUTER, tokenBal);
+        IERC20(ASSET_TOKEN).forceApprove(UNISWAP_V2_ROUTER, assetBalance);
+        IUniswapV2Router02(UNISWAP_V2_ROUTER).addLiquidity(
             token,
-            assetToken,
+            ASSET_TOKEN,
             tokenBal,
             assetBalance,
             0,            // amountAMin — accept any price at graduation
@@ -190,7 +190,7 @@ contract GradPadFactory is Ownable {
         // Flip token into post-graduation state; sets graduationTimestamp for vesting
         IGradPadToken(token).graduate();
 
-        address uniswapPair = IUniswapV2Factory(uniswapV2Factory).getPair(token, assetToken);
+        address uniswapPair = IUniswapV2Factory(UNISWAP_V2_FACTORY).getPair(token, ASSET_TOKEN);
         emit GradPadGraduated(token, uniswapPair, block.timestamp);
     }
 

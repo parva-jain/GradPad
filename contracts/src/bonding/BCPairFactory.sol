@@ -60,7 +60,14 @@ contract BCPairFactory is Ownable {
         if (router == address(0)) revert InvalidRouter();
         
         // Create new pair
-        bytes32 deploySalt = keccak256(abi.encodePacked(token0, token1, block.timestamp));
+        bytes32 deploySalt;
+        assembly {
+            let ptr := mload(0x40)
+            mstore(ptr, shl(96, token0))
+            mstore(add(ptr, 0x14), shl(96, token1))
+            mstore(add(ptr, 0x28), timestamp())
+            deploySalt := keccak256(ptr, 0x48)
+        }
         pair = Clones.cloneDeterministic(pairImpl, deploySalt);
 
         // Initialize pair
