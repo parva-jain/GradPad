@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import "forge-std/Test.sol";
-import "../src/MockUSDC.sol";
+import {Test} from "forge-std/Test.sol";
+import {MockUSDC} from "../src/MockUSDC.sol";
 
 contract MockUSDCTest is Test {
     MockUSDC usdc;
