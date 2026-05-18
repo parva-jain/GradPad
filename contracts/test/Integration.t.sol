@@ -111,14 +111,16 @@ contract IntegrationTest is Test {
         vm.expectRevert("GradPad: cliff not elapsed");
         GradPadToken(token).claimBucket(1);
 
+        uint256 gradTime = GradPadToken(token).graduationTimestamp();
+
         // Partial vest (~50%)
-        vm.warp(block.timestamp + 30 days + 45 days);
+        vm.warp(gradTime + 30 days + 45 days);
         vm.prank(team);
         GradPadToken(token).claimBucket(1);
         assertApproxEqRel(GradPadToken(token).balanceOf(team), (SUPPLY * 3000 / 10000) / 2, 0.02e18);
 
         // Full vest
-        vm.warp(block.timestamp + 90 days);
+        vm.warp(gradTime + 30 days + 90 days + 1); // past cliff + full vest duration
         vm.prank(team);
         GradPadToken(token).claimBucket(1);
         assertApproxEqRel(GradPadToken(token).balanceOf(team), SUPPLY * 3000 / 10000, 0.01e18);
@@ -145,9 +147,11 @@ contract IntegrationTest is Test {
     function test_sell_before_graduation() public {
         address token = _createToken(bytes32(uint256(3)));
         address pair  = factory.tokenToPair(token);
-        IBCPair.Pool memory kBefore = IBCPair(pair).getPool();
 
         uint256 tokensOut = _buy(token, alice, 2_000 * 1e6);
+
+        // Capture k immediately before the sell
+        IBCPair.Pool memory kAfterBuy = IBCPair(pair).getPool();
 
         // Alice sells half back
         uint256 sellAmount = tokensOut / 2;
@@ -159,7 +163,7 @@ contract IntegrationTest is Test {
 
         assertGt(assetBack, 0);
         assertLe(assetBack, 2_000 * 1e6);
-        assertGe(IBCPair(pair).getPool().k, kBefore.k);
+        assertGe(IBCPair(pair).getPool().k, kAfterBuy.k); // k must not decrease from pre-sell state
     }
 
     // ─── Test 4: Multi-user buy and sell ──────────────────────────────────────
@@ -176,6 +180,9 @@ contract IntegrationTest is Test {
         // Alice bought first at lower price → more tokens per USDC
         assertGt(aliceTokens, bobTokens);
 
+        // Capture k before Alice's sell
+        uint256 kBeforeSell = IBCPair(pair).getPool().k;
+
         // Alice sells her tokens
         router.grantRole(router.EXECUTOR_ROLE(), alice);
         vm.startPrank(alice);
@@ -184,7 +191,7 @@ contract IntegrationTest is Test {
         vm.stopPrank();
 
         assertGt(aliceAssetBack, 0);
-        assertGe(IBCPair(pair).getPool().k, uint256(1));
+        assertGe(IBCPair(pair).getPool().k, kBeforeSell); // k must not decrease from pre-sell state
     }
 
     // ─── Test 5: Slippage protection ──────────────────────────────────────────
