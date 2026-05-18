@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import "forge-std/Script.sol";
-import "../src/MockUSDC.sol";
-import "../src/bonding/BCPair.sol";
-import "../src/bonding/BCPairFactory.sol";
-import "../src/bonding/BCRouter.sol";
-import "../src/GradPadToken.sol";
-import "../src/GradPadFactory.sol";
+import {Script, console} from "forge-std/Script.sol";
+import {MockUSDC} from "../src/MockUSDC.sol";
+import {BCPair} from "../src/bonding/BCPair.sol";
+import {BCPairFactory} from "../src/bonding/BCPairFactory.sol";
+import {BCRouter} from "../src/bonding/BCRouter.sol";
+import {GradPadToken} from "../src/GradPadToken.sol";
+import {GradPadFactory} from "../src/GradPadFactory.sol";
 
 /// @notice Deploys the full GradPad contract suite in dependency order.
 ///         After deployment, GradPadFactory is granted EXECUTOR_ROLE on BCRouter
