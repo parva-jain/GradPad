@@ -31,7 +31,6 @@ contract IntegrationTest is Test {
     uint256 constant DAILY_USDC      = 1_000  * 1e6;
 
     function setUp() public {
-        // NOTE: Use the same fork block as GradPadFactory.t.sol for consistency
         vm.createSelectFork(vm.envString("BASE_RPC_URL"), 29_000_000);
 
         usdc = new MockUSDC();
@@ -67,12 +66,12 @@ contract IntegrationTest is Test {
         }
     }
 
+    /// @dev Mint USDC to buyer, approve factory, and call buyGPToken.
     function _buy(address token, address buyer, uint256 usdcAmount) internal returns (uint256 tokensOut) {
         _mintUSDC(buyer, usdcAmount);
-        router.grantRole(router.EXECUTOR_ROLE(), buyer);
         vm.startPrank(buyer);
-        usdc.approve(address(router), usdcAmount);
-        tokensOut = router.buy(token, address(usdc), usdcAmount, buyer, 0);
+        usdc.approve(address(factory), usdcAmount);
+        tokensOut = factory.buyGPToken(token, usdcAmount, buyer, 0);
         vm.stopPrank();
     }
 
@@ -83,7 +82,7 @@ contract IntegrationTest is Test {
     }
 
     function _createToken(bytes32 salt) internal returns (address) {
-        return factory.createGradPad(
+        return factory.createGPToken(
             "TestToken", "TEST", SUPPLY, _defaultBuckets(),
             GRAD_THRESHOLD, VIRTUAL_RESERVE, salt
         );
@@ -95,14 +94,10 @@ contract IntegrationTest is Test {
         address token = _createToken(bytes32(uint256(1)));
         assertTrue(GradPadToken(token).bondingPhase());
 
+        // Buying above threshold auto-graduates inside buyGPToken
         uint256 buyAmount = GRAD_THRESHOLD + 500 * 1e6;
         _buy(token, alice, buyAmount);
 
-        address pair    = factory.tokenToPair(token);
-        uint256 assetBal = IBCPair(pair).assetBalance();
-        assertGe(assetBal, GRAD_THRESHOLD);
-
-        factory.graduate(token);
         assertFalse(GradPadToken(token).bondingPhase());
         assertGt(GradPadToken(token).graduationTimestamp(), 0);
 
@@ -120,7 +115,7 @@ contract IntegrationTest is Test {
         assertApproxEqRel(GradPadToken(token).balanceOf(team), (SUPPLY * 3000 / 10000) / 2, 0.02e18);
 
         // Full vest
-        vm.warp(gradTime + 30 days + 90 days + 1); // past cliff + full vest duration
+        vm.warp(gradTime + 30 days + 90 days + 1);
         vm.prank(team);
         GradPadToken(token).claimBucket(1);
         assertApproxEqRel(GradPadToken(token).balanceOf(team), SUPPLY * 3000 / 10000, 0.01e18);
@@ -131,14 +126,13 @@ contract IntegrationTest is Test {
     function test_graduate_exactly_at_threshold() public {
         address token = _createToken(bytes32(uint256(2)));
 
-        // One unit below → must fail
+        // One unit below → manual graduateGPToken must fail, no auto-grad
         _buy(token, alice, GRAD_THRESHOLD - 1);
         vm.expectRevert(GradPadFactory.ThresholdNotMet.selector);
-        factory.graduate(token);
+        factory.graduateGPToken(token);
 
-        // Add the missing unit → must succeed
+        // The final unit triggers auto-graduation inside the buy
         _buy(token, alice, 1);
-        factory.graduate(token);
         assertFalse(GradPadToken(token).bondingPhase());
     }
 
@@ -153,17 +147,16 @@ contract IntegrationTest is Test {
         // Capture k immediately before the sell
         IBCPair.Pool memory kAfterBuy = IBCPair(pair).getPool();
 
-        // Alice sells half back
+        // Alice sells half back via factory
         uint256 sellAmount = tokensOut / 2;
-        router.grantRole(router.EXECUTOR_ROLE(), alice);
         vm.startPrank(alice);
-        GradPadToken(token).approve(address(router), sellAmount);
-        uint256 assetBack = router.sell(token, address(usdc), sellAmount, alice, 0);
+        GradPadToken(token).approve(address(factory), sellAmount);
+        uint256 assetBack = factory.sellGPToken(token, sellAmount, alice, 0);
         vm.stopPrank();
 
         assertGt(assetBack, 0);
         assertLe(assetBack, 2_000 * 1e6);
-        assertGe(IBCPair(pair).getPool().k, kAfterBuy.k); // k must not decrease from pre-sell state
+        assertGe(IBCPair(pair).getPool().k, kAfterBuy.k);
     }
 
     // ─── Test 4: Multi-user buy and sell ──────────────────────────────────────
@@ -180,18 +173,16 @@ contract IntegrationTest is Test {
         // Alice bought first at lower price → more tokens per USDC
         assertGt(aliceTokens, bobTokens);
 
-        // Capture k before Alice's sell
         uint256 kBeforeSell = IBCPair(pair).getPool().k;
 
-        // Alice sells her tokens
-        router.grantRole(router.EXECUTOR_ROLE(), alice);
+        // Alice sells her tokens via factory
         vm.startPrank(alice);
-        GradPadToken(token).approve(address(router), aliceTokens);
-        uint256 aliceAssetBack = router.sell(token, address(usdc), aliceTokens, alice, 0);
+        GradPadToken(token).approve(address(factory), aliceTokens);
+        uint256 aliceAssetBack = factory.sellGPToken(token, aliceTokens, alice, 0);
         vm.stopPrank();
 
         assertGt(aliceAssetBack, 0);
-        assertGe(IBCPair(pair).getPool().k, kBeforeSell); // k must not decrease from pre-sell state
+        assertGe(IBCPair(pair).getPool().k, kBeforeSell);
     }
 
     // ─── Test 5: Slippage protection ──────────────────────────────────────────
@@ -199,22 +190,21 @@ contract IntegrationTest is Test {
     function test_slippage_protection_buy() public {
         address token = _createToken(bytes32(uint256(5)));
         uint256 assetIn = 1_000 * 1e6;
-        uint256 quoted  = router.getTokensOut(token, address(usdc), assetIn);
+        uint256 quoted  = factory.getTokensOut(token, assetIn);
 
         _mintUSDC(alice, assetIn);
-        router.grantRole(router.EXECUTOR_ROLE(), alice);
 
         // One unit above quoted → revert
         vm.startPrank(alice);
-        usdc.approve(address(router), assetIn);
+        usdc.approve(address(factory), assetIn);
         vm.expectRevert(BCRouter.InsufficientOutput.selector);
-        router.buy(token, address(usdc), assetIn, alice, quoted + 1);
+        factory.buyGPToken(token, assetIn, alice, quoted + 1);
         vm.stopPrank();
 
         // Exactly quoted → succeed
         vm.startPrank(alice);
-        usdc.approve(address(router), assetIn);
-        uint256 actual = router.buy(token, address(usdc), assetIn, alice, quoted);
+        usdc.approve(address(factory), assetIn);
+        uint256 actual = factory.buyGPToken(token, assetIn, alice, quoted);
         vm.stopPrank();
         assertEq(actual, quoted);
     }
@@ -225,9 +215,9 @@ contract IntegrationTest is Test {
         address tokenA = _createToken(bytes32(uint256(6)));
         address tokenB = _createToken(bytes32(uint256(7)));
 
-        // Graduate token A
+        // Graduate token A via auto-graduation
         _buy(tokenA, alice, GRAD_THRESHOLD + 1e6);
-        factory.graduate(tokenA);
+        assertFalse(GradPadToken(tokenA).bondingPhase());
 
         // Token B still in bonding phase, unaffected
         assertTrue(GradPadToken(tokenB).bondingPhase());
@@ -240,21 +230,20 @@ contract IntegrationTest is Test {
         address token = _createToken(bytes32(uint256(8)));
         // No buys — threshold not met
         vm.expectRevert(GradPadFactory.ThresholdNotMet.selector);
-        factory.graduate(token);
+        factory.graduateGPToken(token);
 
         // Even after some buys, below threshold still reverts
         _buy(token, alice, 100 * 1e6);
         vm.prank(bob);
         vm.expectRevert(GradPadFactory.ThresholdNotMet.selector);
-        factory.graduate(token);
+        factory.graduateGPToken(token);
     }
 
     // ─── Test 8: LP tokens locked post-graduation ─────────────────────────────
 
     function test_lp_tokens_locked_post_graduation() public {
         address token = _createToken(bytes32(uint256(9)));
-        _buy(token, alice, GRAD_THRESHOLD + 1e6);
-        factory.graduate(token);
+        _buy(token, alice, GRAD_THRESHOLD + 1e6); // auto-graduates
 
         (bool ok, bytes memory data) = UNISWAP_V2_FACTORY.staticcall(
             abi.encodeWithSignature("getPair(address,address)", token, address(usdc))

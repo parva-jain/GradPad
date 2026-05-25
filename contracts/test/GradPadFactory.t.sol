@@ -51,7 +51,7 @@ contract GradPadFactoryTest is Test {
 
     function _defaultBuckets() internal pure returns (GradPadToken.Bucket[] memory b) {
         b = new GradPadToken.Bucket[](2);
-        b[0] = GradPadToken.Bucket("Liquidity", 7000, address(0),    0,       0,       true);
+        b[0] = GradPadToken.Bucket("Liquidity", 7000, address(0),     0,       0,       true);
         b[1] = GradPadToken.Bucket("Team",      3000, address(0xBEEF), 30 days, 90 days, false);
     }
 
@@ -87,10 +87,10 @@ contract GradPadFactoryTest is Test {
         new GradPadFactory(address(tokenImpl), address(router), address(pairFactory), UNI_FACTORY, UNI_ROUTER, address(0));
     }
 
-    // ─── createGradPad happy paths ─────────────────────────────────────────────
+    // ─── createGPToken happy paths ─────────────────────────────────────────────
 
-    function test_createGradPad_token_initialized_correctly() public {
-        address token = factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+    function test_createGPToken_token_initialized_correctly() public {
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
         GradPadToken t = GradPadToken(token);
         assertTrue(t.bondingPhase());
         assertEq(t.totalTokenSupply(), SUPPLY);
@@ -98,65 +98,99 @@ contract GradPadFactoryTest is Test {
         assertEq(t.bucketCount(), 2);
     }
 
-    function test_createGradPad_pair_registered() public {
-        address token = factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+    function test_createGPToken_pair_registered() public {
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
         assertNotEq(factory.tokenToPair(token), address(0));
     }
 
-    function test_createGradPad_different_salts_produce_different_tokens() public {
-        address t1 = factory.createGradPad("A", "A", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
-        address t2 = factory.createGradPad("B", "B", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(2)));
+    function test_createGPToken_different_salts_produce_different_tokens() public {
+        address t1 = factory.createGPToken("A", "A", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+        address t2 = factory.createGPToken("B", "B", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(2)));
         assertNotEq(t1, t2);
     }
 
-    function test_createGradPad_duplicate_salt_reverts() public {
-        factory.createGradPad("A", "A", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+    function test_createGPToken_duplicate_salt_reverts() public {
+        factory.createGPToken("A", "A", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
         vm.expectRevert();
-        factory.createGradPad("B", "B", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+        factory.createGPToken("B", "B", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
     }
 
-    function test_createGradPad_increments_allTokensLength() public {
+    function test_createGPToken_increments_allTokensLength() public {
         assertEq(factory.allTokensLength(), 0);
-        factory.createGradPad("A", "A", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+        factory.createGPToken("A", "A", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
         assertEq(factory.allTokensLength(), 1);
-        factory.createGradPad("B", "B", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(2)));
+        factory.createGPToken("B", "B", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(2)));
         assertEq(factory.allTokensLength(), 2);
     }
 
-    function test_createGradPad_emits_GradPadCreated() public {
+    function test_createGPToken_emits_GPTokenCreated() public {
         vm.expectEmit(false, true, false, true);
-        emit GradPadFactory.GradPadCreated(address(0), address(this), "Grad", "G", SUPPLY);
-        factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+        emit GradPadFactory.GPTokenCreated(address(0), address(this), "Grad", "G", SUPPLY);
+        factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
     }
 
-    function test_createGradPad_emits_BucketAdded_for_each_bucket() public {
+    function test_createGPToken_emits_BucketAdded_for_each_bucket() public {
         vm.expectEmit(false, true, false, true);
         emit GradPadFactory.BucketAdded(address(0), 0, "Liquidity", 7000, address(0), 0, 0, true);
         vm.expectEmit(false, true, false, true);
         emit GradPadFactory.BucketAdded(address(0), 1, "Team", 3000, address(0xBEEF), 30 days, 90 days, false);
-        factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+        factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
     }
 
-    // ─── graduate reverts (offline — Uniswap calls will revert) ───────────────
+    // ─── graduateGPToken reverts (offline — Uniswap calls will revert) ─────────
 
-    function test_graduate_pair_not_found_reverts() public {
+    function test_graduateGPToken_pair_not_found_reverts() public {
         vm.expectRevert(GradPadFactory.PairNotFound.selector);
-        factory.graduate(address(0xDEAD));
+        factory.graduateGPToken(address(0xDEAD));
     }
 
-    function test_graduate_threshold_not_met_reverts() public {
-        address token = factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+    function test_graduateGPToken_threshold_not_met_reverts() public {
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
         // No buys — assetBalance = 0 < GRAD_THRESHOLD
         vm.expectRevert(GradPadFactory.ThresholdNotMet.selector);
-        factory.graduate(token);
+        factory.graduateGPToken(token);
     }
 
-    // ─── Fuzz: createGradPad always produces valid token ──────────────────────
+    // ─── buyGPToken / sellGPToken offline reverts ──────────────────────────────
 
-    function test_fuzz_createGradPad(bytes32 salt, uint96 supply) public {
+    function test_buyGPToken_unregistered_token_reverts() public {
+        vm.expectRevert(GradPadFactory.TokenNotRegistered.selector);
+        factory.buyGPToken(address(0xDEAD), 1e6, address(this), 0);
+    }
+
+    function test_sellGPToken_unregistered_token_reverts() public {
+        vm.expectRevert(GradPadFactory.TokenNotRegistered.selector);
+        factory.sellGPToken(address(0xDEAD), 1e18, address(this), 0);
+    }
+
+    function test_buyGPToken_after_graduation_reverts() public {
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+        // Impersonate the factory to force graduation state (bypasses Uniswap in offline tests)
+        vm.prank(address(factory));
+        GradPadToken(token).setGraduationTimestamp(block.timestamp);
+
+        usdc.mint(address(this), 1e6);
+        usdc.approve(address(factory), 1e6);
+        vm.expectRevert(GradPadFactory.NotInBondingPhase.selector);
+        factory.buyGPToken(token, 1e6, address(this), 0);
+    }
+
+    function test_sellGPToken_after_graduation_reverts() public {
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(1)));
+        // Impersonate the factory to force graduation state (bypasses Uniswap in offline tests)
+        vm.prank(address(factory));
+        GradPadToken(token).setGraduationTimestamp(block.timestamp);
+
+        vm.expectRevert(GradPadFactory.NotInBondingPhase.selector);
+        factory.sellGPToken(token, 1e18, address(this), 0);
+    }
+
+    // ─── Fuzz: createGPToken always produces valid token ──────────────────────
+
+    function test_fuzz_createGPToken(bytes32 salt, uint96 supply) public {
         vm.assume(supply >= 10_000); // min for basis points math
         GradPadToken.Bucket[] memory b = _defaultBuckets();
-        address token = factory.createGradPad("Test", "TST", supply, b, 1e6, 1e6, salt);
+        address token = factory.createGPToken("Test", "TST", supply, b, 1e6, 1e6, salt);
         assertTrue(GradPadToken(token).bondingPhase());
         assertEq(GradPadToken(token).totalTokenSupply(), supply);
         assertEq(GradPadToken(token).factory(), address(factory));
@@ -170,7 +204,6 @@ contract GradPadFactoryTest is Test {
 
 /// forge-config: default.fuzz.runs = 16
 contract GradPadFactoryForkTest is Test {
-    // Real Uniswap V2 factory on Base mainnet (the router resolves to this internally)
     address constant UNISWAP_V2_FACTORY = 0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6;
     address constant UNISWAP_V2_ROUTER  = 0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24;
 
@@ -203,7 +236,6 @@ contract GradPadFactoryForkTest is Test {
             address(usdc)
         );
         router.grantRole(router.EXECUTOR_ROLE(), address(factory));
-        router.grantRole(router.EXECUTOR_ROLE(), address(this));
     }
 
     function _defaultBuckets() internal pure returns (GradPadToken.Bucket[] memory b) {
@@ -212,30 +244,30 @@ contract GradPadFactoryForkTest is Test {
         b[1] = GradPadToken.Bucket("Team",      3000, address(0xBEEF), 30 days, 90 days, false);
     }
 
+    /// @dev Mint USDC to this contract and buy via the factory (which holds EXECUTOR_ROLE).
     function _fundAndBuy(address token, uint256 usdcAmount) internal {
         usdc.mint(address(this), usdcAmount);
-        usdc.approve(address(router), usdcAmount);
-        router.buy(token, address(usdc), usdcAmount, address(this), 0);
+        usdc.approve(address(factory), usdcAmount);
+        factory.buyGPToken(token, usdcAmount, address(this), 0);
     }
 
     // ─── Graduation happy path ─────────────────────────────────────────────────
 
-    function test_fork_graduate_seeds_uniswap_pair() public {
-        address token = factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(42)));
-        _fundAndBuy(token, GRAD_THRESHOLD + 1e6);
+    function test_fork_graduateGPToken_auto_on_threshold_crossing_buy() public {
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(42)));
+        assertTrue(GradPadToken(token).bondingPhase());
 
-        factory.graduate(token);
+        // Buying above threshold triggers auto-graduation inside buyGPToken
+        _fundAndBuy(token, GRAD_THRESHOLD + 1e6);
 
         assertFalse(GradPadToken(token).bondingPhase());
         assertGt(GradPadToken(token).graduationTimestamp(), 0);
     }
 
-    function test_fork_graduate_lp_tokens_locked_at_address1() public {
-        address token = factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(43)));
-        _fundAndBuy(token, GRAD_THRESHOLD + 1e6);
-        factory.graduate(token);
+    function test_fork_graduateGPToken_lp_tokens_locked_at_address1() public {
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(43)));
+        _fundAndBuy(token, GRAD_THRESHOLD + 1e6); // auto-graduates
 
-        // Retrieve Uniswap V2 pair
         (bool ok, bytes memory data) = UNISWAP_V2_FACTORY.staticcall(
             abi.encodeWithSignature("getPair(address,address)", token, address(usdc))
         );
@@ -245,38 +277,36 @@ contract GradPadFactoryForkTest is Test {
         assertGt(IERC20(uniPair).balanceOf(address(1)), 0);
     }
 
-    function test_fork_graduate_already_graduated_reverts() public {
-        address token = factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(44)));
-        _fundAndBuy(token, GRAD_THRESHOLD + 1e6);
-        factory.graduate(token);
+    function test_fork_graduateGPToken_already_graduated_reverts() public {
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(44)));
+        _fundAndBuy(token, GRAD_THRESHOLD + 1e6); // auto-graduates
 
+        // Manual graduation call must revert — already graduated
         vm.expectRevert(GradPadFactory.AlreadyGraduated.selector);
-        factory.graduate(token);
+        factory.graduateGPToken(token);
     }
 
-    function test_fork_graduate_exactly_at_threshold() public {
-        address token = factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(45)));
+    function test_fork_graduateGPToken_exactly_at_threshold() public {
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(45)));
 
-        // One unit below threshold fails
+        // One unit below threshold: manual call reverts
         _fundAndBuy(token, GRAD_THRESHOLD - 1);
         vm.expectRevert(GradPadFactory.ThresholdNotMet.selector);
-        factory.graduate(token);
+        factory.graduateGPToken(token);
 
-        // Add the last unit → graduate succeeds
+        // The final unit auto-graduates inside the buy
         _fundAndBuy(token, 1);
-        factory.graduate(token); // must not revert
         assertFalse(GradPadToken(token).bondingPhase());
     }
 
     // ─── Fuzz graduation threshold ─────────────────────────────────────────────
 
-    function test_fuzz_fork_graduate_threshold(uint32 extraUsdc) public {
+    function test_fuzz_fork_graduateGPToken_threshold(uint32 extraUsdc) public {
         vm.assume(extraUsdc > 0 && extraUsdc <= 5_000 * 1e6);
-        address token = factory.createGradPad("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(99)));
+        address token = factory.createGPToken("Grad", "G", SUPPLY, _defaultBuckets(), GRAD_THRESHOLD, VIRTUAL_RESERVE, bytes32(uint256(99)));
 
-        // Succeed: buy above threshold
+        // Buying above threshold auto-graduates
         _fundAndBuy(token, GRAD_THRESHOLD + extraUsdc);
-        factory.graduate(token);
         assertFalse(GradPadToken(token).bondingPhase());
     }
 }

@@ -1,0 +1,6 @@
+.superpowers
+.claude
+contracts/.env
+contracts/cache/
+contracts/out/
+docs/
