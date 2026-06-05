@@ -2,15 +2,18 @@
 pragma solidity ^0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MockUSDC} from "../src/MockUSDC.sol";
 import {BCPair} from "../src/bonding/BCPair.sol";
 import {BCPairFactory} from "../src/bonding/BCPairFactory.sol";
 import {BCRouter} from "../src/bonding/BCRouter.sol";
 import {GradPadToken} from "../src/GradPadToken.sol";
-import {GradPadFactory} from "../src/GradPadFactory.sol";
+import {GradPadFactoryV1} from "../src/GradPadFactoryV1.sol";
 
 /// @notice Deploys the full GradPad contract suite in dependency order.
-///         After deployment, GradPadFactory is granted EXECUTOR_ROLE on BCRouter
+///         GradPadFactoryV1 is deployed behind a UUPS ERC1967 proxy so it can
+///         be upgraded to V2+ without redeploying the proxy address.
+///         After deployment, the proxy is granted EXECUTOR_ROLE on BCRouter
 ///         so it can seed initial reserves and trigger graduation.
 ///
 /// Usage (dry-run):
@@ -36,43 +39,52 @@ contract Deploy is Script {
 
         // 1. MockUSDC — pair asset token for development / Base Sepolia
         MockUSDC usdc = new MockUSDC();
-        console.log("MockUSDC:          ", address(usdc));
+        console.log("MockUSDC:               ", address(usdc));
 
         // 2. BCPair implementation (clone target)
         BCPair pairImpl = new BCPair();
-        console.log("BCPair impl:       ", address(pairImpl));
+        console.log("BCPair impl:            ", address(pairImpl));
 
         // 3. BCPairFactory — manages pair registry and clone creation
         BCPairFactory pairFactory = new BCPairFactory(deployer, address(pairImpl));
-        console.log("BCPairFactory:     ", address(pairFactory));
+        console.log("BCPairFactory:          ", address(pairFactory));
 
         // 4. BCRouter — AMM execution layer; factory_ = pairFactory, admin = deployer
         BCRouter router = new BCRouter(address(pairFactory), deployer);
-        console.log("BCRouter:          ", address(router));
+        console.log("BCRouter:               ", address(router));
 
         // 5. Wire router into pairFactory so createPair knows the router address
         pairFactory.setRouter(address(router));
 
         // 6. GradPadToken implementation (EIP-1167 clone target)
         GradPadToken tokenImpl = new GradPadToken();
-        console.log("GradPadToken impl: ", address(tokenImpl));
+        console.log("GradPadToken impl:      ", address(tokenImpl));
 
-        // 7. GradPadFactory — main entry point for token launches
-        GradPadFactory factory = new GradPadFactory(
-            address(tokenImpl),
-            address(router),
-            address(pairFactory),
-            UNISWAP_V2_FACTORY,
-            UNISWAP_V2_ROUTER,
-            address(usdc)
-        );
-        console.log("GradPadFactory:    ", address(factory));
+        // 7. GradPadFactoryV1 implementation — logic contract behind the proxy
+        GradPadFactoryV1 factoryImpl = new GradPadFactoryV1();
+        console.log("GradPadFactoryV1 impl:  ", address(factoryImpl));
 
-        // 8. Grant GradPadFactory EXECUTOR_ROLE on BCRouter so it can:
+        // 8. ERC1967 proxy — the stable address users and integrators interact with
+        GradPadFactoryV1 factory = GradPadFactoryV1(address(new ERC1967Proxy(
+            address(factoryImpl),
+            abi.encodeCall(GradPadFactoryV1.initialize, (
+                address(tokenImpl),
+                address(router),
+                address(pairFactory),
+                UNISWAP_V2_FACTORY,
+                UNISWAP_V2_ROUTER,
+                address(usdc),
+                deployer
+            ))
+        )));
+        console.log("GradPadFactoryV1 proxy: ", address(factory));
+
+        // 9. Grant the proxy EXECUTOR_ROLE on BCRouter so it can:
         //    - addInitialLiquidity on token creation
+        //    - buy / sell during bonding phase
         //    - withdrawBondingCurveLiquidity at graduation
         router.grantRole(router.EXECUTOR_ROLE(), address(factory));
-        console.log("EXECUTOR_ROLE granted to GradPadFactory on BCRouter");
+        console.log("EXECUTOR_ROLE granted to proxy on BCRouter");
 
         vm.stopBroadcast();
     }
