@@ -66,13 +66,47 @@ contract BCPairTest is Test {
         assertEq(pool.k,        R0 * R1);
     }
 
+    function test_getPool_correct_after_swap() public {
+        // Buy: deposit asset, receive tokens
+        uint256 assetIn = 1_000;
+        BCPair.Pool memory before = pair.getPool();
+        uint256 newR1 = before.reserve1 + assetIn;
+        uint256 newR0 = (before.k + newR1 - 1) / newR1;
+        uint256 tokensOut = before.reserve0 - newR0;
+
+        token1.mint(address(pair), assetIn);
+        pair.swap(tokensOut, 0, 0, assetIn, address(this));
+
+        BCPair.Pool memory after_ = pair.getPool();
+        assertEq(after_.reserve0, before.reserve0 - tokensOut);
+        assertEq(after_.reserve1, before.reserve1 + assetIn);
+        assertGe(after_.k, before.k);
+        assertEq(after_.lastUpdated, block.timestamp);
+    }
+
     function test_tokenBalance_returns_reserve0() public view {
         assertEq(pair.tokenBalance(), R0);
     }
 
-    function test_assetBalance_returns_real_token1_balance() public view {
-        // No real token1 was deposited; virtual reserve doesn't count
+    function test_assetBalance_returns_zero_before_any_swap() public view {
+        // Virtual reserve is excluded; no real swaps have happened yet.
         assertEq(pair.assetBalance(), 0);
+    }
+
+    function test_assetBalance_reflects_real_swaps() public {
+        uint256 assetIn = 1_000;
+        uint256 newR1 = R1 + assetIn;
+        uint256 newR0 = (uint256(R0) * uint256(R1) + newR1 - 1) / newR1;
+        uint256 tokensOut = R0 - newR0;
+        token1.mint(address(pair), assetIn);
+        pair.swap(tokensOut, 0, 0, assetIn, address(this));
+        assertEq(pair.assetBalance(), assetIn);
+    }
+
+    function test_assetBalance_unaffected_by_direct_transfer() public {
+        // Donating token1 directly to the pair must NOT change assetBalance().
+        token1.mint(address(pair), 9999);
+        assertEq(pair.assetBalance(), 0); // still zero — no swaps, no real asset
     }
 
     function test_price0_asset_per_token() public view {

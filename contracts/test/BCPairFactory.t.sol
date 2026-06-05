@@ -114,6 +114,35 @@ contract BCPairFactoryTest is Test {
         factory.setRouter(address(0x1));
     }
 
+    // ── Unit: same-block nonce prevents salt collision ─────────────────────────
+
+    function test_createPair_same_block_no_collision() public {
+        MockToken tokenC = new MockToken("C", "C", 18);
+        // Warp to a fixed timestamp and create two different pairs in the same block.
+        // With the old timestamp-based salt the second call would still succeed here
+        // (different token0), but the nonce guarantees uniqueness unconditionally.
+        vm.warp(1_000_000);
+        address pair1 = factory.createPair(address(tokenA), address(tokenB));
+        // same block.timestamp, different token pair
+        address pair2 = factory.createPair(address(tokenA), address(tokenC));
+        assertNotEq(pair1, address(0));
+        assertNotEq(pair2, address(0));
+        assertNotEq(pair1, pair2);
+    }
+
+    function test_createPair_nonce_increments() public {
+        MockToken tokenC = new MockToken("C", "C", 18);
+        MockToken tokenD = new MockToken("D", "D", 18);
+        vm.warp(42); // same timestamp for all
+        address p1 = factory.createPair(address(tokenA), address(tokenB));
+        address p2 = factory.createPair(address(tokenA), address(tokenC));
+        address p3 = factory.createPair(address(tokenA), address(tokenD));
+        // All three pairs must be distinct addresses
+        assertNotEq(p1, p2);
+        assertNotEq(p2, p3);
+        assertNotEq(p1, p3);
+    }
+
     // ── Fuzz: createPair symmetry ──────────────────────────────────────────────
 
     function test_fuzz_createPair_symmetry(address a, address b) public {

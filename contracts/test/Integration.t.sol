@@ -3,7 +3,8 @@ pragma solidity ^0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {GradPadFactory} from "../src/GradPadFactory.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {GradPadFactoryV1} from "../src/GradPadFactoryV1.sol";
 import {GradPadToken} from "../src/GradPadToken.sol";
 import {MockUSDC} from "../src/MockUSDC.sol";
 import {BCPair} from "../src/bonding/BCPair.sol";
@@ -16,10 +17,10 @@ contract IntegrationTest is Test {
     address constant UNISWAP_V2_FACTORY = 0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6;
     address constant UNISWAP_V2_ROUTER  = 0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24;
 
-    GradPadFactory factory;
-    MockUSDC       usdc;
-    BCRouter       router;
-    BCPairFactory  pairFactory;
+    GradPadFactoryV1 factory;
+    MockUSDC         usdc;
+    BCRouter         router;
+    BCPairFactory    pairFactory;
 
     address alice = address(0xA11CE);
     address bob   = address(0xB0B);
@@ -41,14 +42,20 @@ contract IntegrationTest is Test {
         pairFactory.setRouter(address(router));
 
         GradPadToken tokenImpl = new GradPadToken();
-        factory = new GradPadFactory(
-            address(tokenImpl),
-            address(router),
-            address(pairFactory),
-            UNISWAP_V2_FACTORY,
-            UNISWAP_V2_ROUTER,
-            address(usdc)
-        );
+        GradPadFactoryV1 implV1 = new GradPadFactoryV1();
+
+        factory = GradPadFactoryV1(address(new ERC1967Proxy(
+            address(implV1),
+            abi.encodeCall(GradPadFactoryV1.initialize, (
+                address(tokenImpl),
+                address(router),
+                address(pairFactory),
+                UNISWAP_V2_FACTORY,
+                UNISWAP_V2_ROUTER,
+                address(usdc),
+                address(this)
+            ))
+        )));
 
         router.grantRole(router.EXECUTOR_ROLE(), address(factory));
     }
@@ -66,7 +73,6 @@ contract IntegrationTest is Test {
         }
     }
 
-    /// @dev Mint USDC to buyer, approve factory, and call buyGPToken.
     function _buy(address token, address buyer, uint256 usdcAmount) internal returns (uint256 tokensOut) {
         _mintUSDC(buyer, usdcAmount);
         vm.startPrank(buyer);
@@ -94,7 +100,6 @@ contract IntegrationTest is Test {
         address token = _createToken(bytes32(uint256(1)));
         assertTrue(GradPadToken(token).bondingPhase());
 
-        // Buying above threshold auto-graduates inside buyGPToken
         uint256 buyAmount = GRAD_THRESHOLD + 500 * 1e6;
         _buy(token, alice, buyAmount);
 
@@ -126,12 +131,10 @@ contract IntegrationTest is Test {
     function test_graduate_exactly_at_threshold() public {
         address token = _createToken(bytes32(uint256(2)));
 
-        // One unit below → manual graduateGPToken must fail, no auto-grad
         _buy(token, alice, GRAD_THRESHOLD - 1);
-        vm.expectRevert(GradPadFactory.ThresholdNotMet.selector);
+        vm.expectRevert(GradPadFactoryV1.ThresholdNotMet.selector);
         factory.graduateGPToken(token);
 
-        // The final unit triggers auto-graduation inside the buy
         _buy(token, alice, 1);
         assertFalse(GradPadToken(token).bondingPhase());
     }
@@ -144,10 +147,8 @@ contract IntegrationTest is Test {
 
         uint256 tokensOut = _buy(token, alice, 2_000 * 1e6);
 
-        // Capture k immediately before the sell
         IBCPair.Pool memory kAfterBuy = IBCPair(pair).getPool();
 
-        // Alice sells half back via factory
         uint256 sellAmount = tokensOut / 2;
         vm.startPrank(alice);
         GradPadToken(token).approve(address(factory), sellAmount);
@@ -170,12 +171,10 @@ contract IntegrationTest is Test {
 
         assertGt(aliceTokens, 0);
         assertGt(bobTokens, 0);
-        // Alice bought first at lower price → more tokens per USDC
         assertGt(aliceTokens, bobTokens);
 
         uint256 kBeforeSell = IBCPair(pair).getPool().k;
 
-        // Alice sells her tokens via factory
         vm.startPrank(alice);
         GradPadToken(token).approve(address(factory), aliceTokens);
         uint256 aliceAssetBack = factory.sellGPToken(token, aliceTokens, alice, 0);
@@ -194,14 +193,12 @@ contract IntegrationTest is Test {
 
         _mintUSDC(alice, assetIn);
 
-        // One unit above quoted → revert
         vm.startPrank(alice);
         usdc.approve(address(factory), assetIn);
         vm.expectRevert(BCRouter.InsufficientOutput.selector);
         factory.buyGPToken(token, assetIn, alice, quoted + 1);
         vm.stopPrank();
 
-        // Exactly quoted → succeed
         vm.startPrank(alice);
         usdc.approve(address(factory), assetIn);
         uint256 actual = factory.buyGPToken(token, assetIn, alice, quoted);
@@ -215,11 +212,9 @@ contract IntegrationTest is Test {
         address tokenA = _createToken(bytes32(uint256(6)));
         address tokenB = _createToken(bytes32(uint256(7)));
 
-        // Graduate token A via auto-graduation
         _buy(tokenA, alice, GRAD_THRESHOLD + 1e6);
         assertFalse(GradPadToken(tokenA).bondingPhase());
 
-        // Token B still in bonding phase, unaffected
         assertTrue(GradPadToken(tokenB).bondingPhase());
         assertEq(GradPadToken(tokenB).graduationTimestamp(), 0);
     }
@@ -228,14 +223,12 @@ contract IntegrationTest is Test {
 
     function test_unauthorized_graduate_before_threshold() public {
         address token = _createToken(bytes32(uint256(8)));
-        // No buys — threshold not met
-        vm.expectRevert(GradPadFactory.ThresholdNotMet.selector);
+        vm.expectRevert(GradPadFactoryV1.ThresholdNotMet.selector);
         factory.graduateGPToken(token);
 
-        // Even after some buys, below threshold still reverts
         _buy(token, alice, 100 * 1e6);
         vm.prank(bob);
-        vm.expectRevert(GradPadFactory.ThresholdNotMet.selector);
+        vm.expectRevert(GradPadFactoryV1.ThresholdNotMet.selector);
         factory.graduateGPToken(token);
     }
 
@@ -243,7 +236,7 @@ contract IntegrationTest is Test {
 
     function test_lp_tokens_locked_post_graduation() public {
         address token = _createToken(bytes32(uint256(9)));
-        _buy(token, alice, GRAD_THRESHOLD + 1e6); // auto-graduates
+        _buy(token, alice, GRAD_THRESHOLD + 1e6);
 
         (bool ok, bytes memory data) = UNISWAP_V2_FACTORY.staticcall(
             abi.encodeWithSignature("getPair(address,address)", token, address(usdc))
