@@ -120,8 +120,11 @@ contract BCRouter is AccessControl, ReentrancyGuard {
         uint256 newAssetReserve = pool.reserve1 + assetAmountIn;
         // Use ceiling division to ensure k is maintained: newTokenReserve = (k + newAssetReserve - 1) / newAssetReserve
         uint256 newTokenReserve = (pool.k + newAssetReserve - 1) / newAssetReserve;
-        
-        tokensOut = pool.reserve0 - newTokenReserve;
+
+        // newTokenReserve < pool.reserve0 is guaranteed by the AMM formula (reserve shrinks on buy)
+        unchecked {
+            tokensOut = pool.reserve0 - newTokenReserve;
+        }
         
         if (tokensOut < minTokensOut) revert InsufficientOutput();
         
@@ -161,8 +164,11 @@ contract BCRouter is AccessControl, ReentrancyGuard {
         uint256 newTokenReserve = pool.reserve0 + tokenAmountIn;
         // Use ceiling division to ensure k is maintained: newAssetReserve = (k + newTokenReserve - 1) / newTokenReserve
         uint256 newAssetReserve = (pool.k + newTokenReserve - 1) / newTokenReserve;
-        
-        assetOut = pool.reserve1 - newAssetReserve;
+
+        // newAssetReserve < pool.reserve1 is guaranteed by the AMM formula (reserve shrinks on sell)
+        unchecked {
+            assetOut = pool.reserve1 - newAssetReserve;
+        }
         
         if (assetOut < minAssetOut) revert InsufficientOutput();
         
@@ -237,14 +243,23 @@ contract BCRouter is AccessControl, ReentrancyGuard {
         return assetOut;
     }
     
-    /// @notice Get current price (asset per token)
-    /// @param token GradPad address
-    /// @param assetToken Asset token address (e.g., USDC, WETH)
+    /// @notice Raw price of one whole GradPad token in asset's smallest unit.
+    ///         Magnitude differs across asset decimal configurations.
+    ///         Divide by 10^decimals(assetToken) for human-readable output.
     function getPrice(address token, address assetToken) external view returns (uint256) {
         address pair = IBCPairFactory(factory).getPair(token, assetToken);
         if (pair == address(0)) return 0;
-        
+
         return IBCPair(pair).price0();
+    }
+
+    /// @notice WAD-normalised price of one whole GradPad token (1e18 = 1 full asset token).
+    ///         Consistent across any asset decimal count — use this for display.
+    function getPriceWAD(address token, address assetToken) external view returns (uint256) {
+        address pair = IBCPairFactory(factory).getPair(token, assetToken);
+        if (pair == address(0)) return 0;
+
+        return IBCPair(pair).price0WAD();
     }
 }
 

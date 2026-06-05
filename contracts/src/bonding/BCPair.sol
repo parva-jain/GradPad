@@ -21,12 +21,17 @@ contract BCPair {
     }
     
     // ============ STATE VARIABLES ============
-    
+
     address public router;
     address public token0;     // GradPad
     address public token1;     // Asset token
-    
-    Pool private _pool;
+
+    // Packed reserves (Uniswap V2 pattern) — both fit in one storage slot.
+    uint128 private _reserve0;       // GradPad reserve
+    uint128 private _reserve1;       // Asset reserve (real + virtual)
+    uint256 private _k;              // Constant product
+    uint32  private _lastUpdated;    // Last update timestamp (seconds)
+    uint128 private _virtualR1Init;  // Virtual asset seeded at setup; excluded from assetBalance()
     
     // ============ EVENTS ============
     
@@ -88,19 +93,18 @@ contract BCPair {
     /// @param reserve1 Initial asset reserve (can be virtual)
     function setupInitialReserves(uint256 reserve0, uint256 reserve1) external onlyRouter returns (bool) {
         if (router == address(0)) revert NotInitialized();
-        
+
         uint256 k = reserve0 * reserve1;
         if (k == 0) revert InvalidK();
-        
-        _pool = Pool({
-            reserve0: reserve0,
-            reserve1: reserve1,
-            k: k,
-            lastUpdated: block.timestamp
-        });
-        
+
+        _reserve0      = uint128(reserve0);
+        _reserve1      = uint128(reserve1);
+        _k             = k;
+        _lastUpdated   = uint32(block.timestamp);
+        _virtualR1Init = uint128(reserve1); // reserve1 is virtual at setup time
+
         emit Sync(reserve0, reserve1);
-        
+
         return true;
     }
     
@@ -119,24 +123,28 @@ contract BCPair {
     ) external onlyRouter {
         if (router == address(0)) revert NotInitialized();
         if (amount0Out == 0 && amount1Out == 0) revert InvalidAmount();
-        
-        // Update reserves based on swap
+
+        uint128 r0 = _reserve0;
+        uint128 r1 = _reserve1;
+
+        // Update reserves based on swap direction
         if (amount0Out > 0) {
-            // Selling asset for GradPad (buying GradPad)
-            _pool.reserve0 -= amount0Out;
-            _pool.reserve1 += amount1In;
-        } else if (amount1Out > 0) {
-            // Selling GradPad for asset (selling GradPad)
-            _pool.reserve0 += amount0In;
-            _pool.reserve1 -= amount1Out;
+            // Buying GradPad: asset in, GradPad out
+            r0 -= uint128(amount0Out);
+            r1 += uint128(amount1In);
+        } else {
+            // Selling GradPad: GradPad in, asset out
+            r0 += uint128(amount0In);
+            r1 -= uint128(amount1Out);
         }
-        
+
         // Verify constant product (with small tolerance for rounding)
-        uint256 newK = _pool.reserve0 * _pool.reserve1;
-        if (newK < _pool.k) revert InvalidK();
-        
-        _pool.lastUpdated = block.timestamp;
-        
+        if (uint256(r0) * uint256(r1) < _k) revert InvalidK();
+
+        _reserve0    = r0;
+        _reserve1    = r1;
+        _lastUpdated = uint32(block.timestamp);
+
         // Transfer tokens
         if (amount0Out > 0) {
             IERC20(token0).safeTransfer(to, amount0Out);
@@ -144,65 +152,89 @@ contract BCPair {
         if (amount1Out > 0) {
             IERC20(token1).safeTransfer(to, amount1Out);
         }
-        
+
         emit Swap(msg.sender, amount0In, amount1In, amount0Out, amount1Out, to);
-        emit Sync(_pool.reserve0, _pool.reserve1);
+        emit Sync(r0, r1);
     }
     
     /// @notice Transfer liquidity from pair to address
     /// @param to Recipient
     function transferLiquidity(address to) external onlyRouter {
-        IERC20(token0).safeTransfer(to, _pool.reserve0);
-        IERC20(token1).safeTransfer(to, this.assetBalance());
+        IERC20(token0).safeTransfer(to, _reserve0);
+        // Use live balance to capture any rounding dust above the tracked reserve.
+        IERC20(token1).safeTransfer(to, IERC20(token1).balanceOf(address(this)));
     }
     
     // ============ VIEW FUNCTIONS ============
     
     /// @notice Get current reserves (Uniswap V2 compatible)
-    /// @return reserve0 GradPad reserve
-    /// @return reserve1 Asset reserve
-    /// @return blockTimestampLast Last update timestamp
     function getReserves() external view returns (
         uint112 reserve0,
         uint112 reserve1,
         uint32 blockTimestampLast
     ) {
-        return (
-            uint112(_pool.reserve0),
-            uint112(_pool.reserve1),
-            uint32(_pool.lastUpdated)
-        );
+        return (uint112(_reserve0), uint112(_reserve1), _lastUpdated);
     }
-    
-    /// @notice Get full pool state
+
+    /// @notice Get full pool state (reconstructed from packed fields for external callers)
     function getPool() external view returns (Pool memory) {
-        return _pool;
+        return Pool({
+            reserve0: _reserve0,
+            reserve1: _reserve1,
+            k:        _k,
+            lastUpdated: _lastUpdated
+        });
     }
-    
+
     /// @notice Get token0 reserve
     function tokenBalance() external view returns (uint256) {
-        return _pool.reserve0;
+        return _reserve0;
     }
-    
-    /// @notice Get token1 reserve (real balance in contract)
+
+    /// @notice Real asset (token1) accumulated through swaps, excluding the initial virtual
+    ///         reserve seeded at setup. Donation-resistant: direct ERC-20 transfers do not
+    ///         change _reserve1, so they cannot spoof graduation in GradPadFactory.
     function assetBalance() external view returns (uint256) {
-        return IERC20(token1).balanceOf(address(this));
+        uint128 r1   = _reserve1;
+        uint128 virt = _virtualR1Init;
+        return r1 > virt ? r1 - virt : 0;
     }
-    
-    /// @notice Get current price (asset per token)
-    /// @dev Returns price in asset token precision (e.g., 1e6 for USDC, 1e18 for WETH)
+
+    /// @notice Price of one whole token0 in asset's SMALLEST UNIT.
+    ///         e.g. with 6-dec USDC: returns USDC_μ; with 18-dec WETH: returns WETH_wei.
+    ///         Magnitude differs by 10^(dec1-6) between USDC and WETH pairs at the same price.
+    ///         Divide by 10^decimals(token1) to get a human-readable number.
     function price0() external view returns (uint256) {
-        if (_pool.reserve0 == 0) return 0;
-        // Multiply by token0 decimals to account for decimal difference
-        return (_pool.reserve1 * (10 ** IERC20Metadata(token0).decimals())) / _pool.reserve0;
+        if (_reserve0 == 0) return 0;
+        return (uint256(_reserve1) * (10 ** IERC20Metadata(token0).decimals())) / _reserve0;
     }
-    
-    /// @notice Get current price (token per asset)
-    /// @dev Returns price with precision matching asset token decimals
+
+    /// @notice Price of one whole token1 in token0's SMALLEST UNIT.
+    ///         Divide by 10^decimals(token0) for a human-readable number.
     function price1() external view returns (uint256) {
-        if (_pool.reserve1 == 0) return 0;
-        // Multiply by token1 decimals to account for decimal difference
-        return (_pool.reserve0 * (10 ** IERC20Metadata(token1).decimals())) / _pool.reserve1;
+        if (_reserve1 == 0) return 0;
+        return (uint256(_reserve0) * (10 ** IERC20Metadata(token1).decimals())) / _reserve1;
+    }
+
+    /// @notice Price of one whole token0 in WAD precision (1e18 = 1 full asset token).
+    ///         Normalised across any asset decimal count — the result is the same
+    ///         magnitude whether the asset is 6-dec USDC or 18-dec WETH.
+    ///         Use this for display / off-chain quoting.
+    function price0WAD() external view returns (uint256) {
+        if (_reserve0 == 0) return 0;
+        uint256 d0 = IERC20Metadata(token0).decimals();
+        uint256 d1 = IERC20Metadata(token1).decimals();
+        // (reserve1 / reserve0) expressed as 1e18 WAD, normalised for both token decimals.
+        return (uint256(_reserve1) * 1e18 * (10 ** d0)) / (_reserve0 * (10 ** d1));
+    }
+
+    /// @notice Price of one whole token1 in WAD precision (1e18 = 1 full token0).
+    ///         Normalised — use for display.
+    function price1WAD() external view returns (uint256) {
+        if (_reserve1 == 0) return 0;
+        uint256 d0 = IERC20Metadata(token0).decimals();
+        uint256 d1 = IERC20Metadata(token1).decimals();
+        return (uint256(_reserve0) * 1e18 * (10 ** d1)) / (_reserve1 * (10 ** d0));
     }
 }
 

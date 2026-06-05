@@ -16,8 +16,14 @@ interface IBCPair {
     function transferLiquidity(address to) external;
     function getPool() external view returns (Pool memory);
     function pricePrecision() external view returns (uint256);
+    /// @notice Price of one whole token0 in asset's smallest unit (raw, decimal-dependent).
     function price0() external view returns (uint256);
+    /// @notice Price of one whole token1 in token0's smallest unit (raw, decimal-dependent).
     function price1() external view returns (uint256);
+    /// @notice Price of one whole token0 in WAD (1e18 = 1 full asset token). Decimal-normalised.
+    function price0WAD() external view returns (uint256);
+    /// @notice Price of one whole token1 in WAD (1e18 = 1 full token0). Decimal-normalised.
+    function price1WAD() external view returns (uint256);
     function tokenBalance() external view returns (uint256);
     function assetBalance() external view returns (uint256);
 }

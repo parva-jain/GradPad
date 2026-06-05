@@ -2,6 +2,8 @@
 pragma solidity ^0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title GradPadToken
@@ -13,7 +15,10 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 /// @dev    Clone-friendly: constructor does nothing. `initialize()` is called once by factory.
 ///         Name/symbol are stored in private fields because the ERC20 constructor cannot run
 ///         on clones (they copy bytecode, not constructor effects).
-contract GradPadToken is ERC20, ReentrancyGuard {
+/// @dev ERC20Permit constructor is called with "" — the domain separator is rebuilt at
+///      runtime via the _hashTypedDataV4 override, which reads _tokenName from storage
+///      so each clone's permit domain uses the correct per-token name.
+contract GradPadToken is ERC20, ERC20Permit, ReentrancyGuard {
     // ============ STRUCTS ============
 
     /// @notice A single allocation slice of the total token supply.
@@ -77,7 +82,8 @@ contract GradPadToken is ERC20, ReentrancyGuard {
     // ============ CONSTRUCTOR ============
 
     /// @dev Empty — clones cannot run constructors. All setup happens in initialize().
-    constructor() ERC20("", "") {}
+    ///      ERC20Permit("") is fine; _hashTypedDataV4 is overridden to use _tokenName.
+    constructor() ERC20("", "") ERC20Permit("") {}
 
     // ============ MODIFIERS ============
 
@@ -170,6 +176,22 @@ contract GradPadToken is ERC20, ReentrancyGuard {
         return _tokenSymbol;
     }
 
+    // ============ EIP-2612 PERMIT ============
+
+    /// @notice Override to build the EIP-712 domain separator from the stored _tokenName
+    ///         rather than the immutable set in the constructor (which is "" for all clones).
+    ///         Each clone therefore has a unique domain that includes its own name.
+    function _hashTypedDataV4(bytes32 structHash) internal view override returns (bytes32) {
+        bytes32 domainSeparator = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+            keccak256(bytes(_tokenName)),
+            keccak256(bytes("1")),
+            block.chainid,
+            address(this)
+        ));
+        return MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
+    }
+
     // ============ FACTORY FUNCTIONS ============
 
     /// @notice Transfer the liquidity bucket's token share to the BCPair at launch.
@@ -195,11 +217,11 @@ contract GradPadToken is ERC20, ReentrancyGuard {
         emit Graduated(block.timestamp);
     }
 
-    /// @notice Test helper — lets factory (or this contract in setUp) force-set graduation.
-    /// @dev    Only callable by factory so it cannot be exploited in production;
-    ///         in tests the test contract deploys as factory.
+    /// @notice Test helper — lets factory force-set graduation to an arbitrary timestamp.
+    /// @dev    Callable only by factory. Tests should deploy themselves as factory in setUp
+    ///         so they can call this without needing a self-call workaround.
     function setGraduationTimestamp(uint256 ts) external {
-        if (msg.sender != factory && msg.sender != address(this)) revert Unauthorized();
+        if (msg.sender != factory) revert Unauthorized();
         graduationTimestamp = ts;
         bondingPhase = false;
     }
@@ -220,14 +242,20 @@ contract GradPadToken is ERC20, ReentrancyGuard {
         require(elapsed >= bucket.cliff, "GradPad: cliff not elapsed");
 
         uint256 bucketTokens = (totalTokenSupply * bucket.basisPoints) / BASIS_POINTS;
-        uint256 vestingElapsed = elapsed - bucket.cliff;
+        // elapsed >= bucket.cliff checked by require above
+        uint256 vestingElapsed;
+        unchecked { vestingElapsed = elapsed - bucket.cliff; }
         uint256 claimable;
 
         if (bucket.vestingDuration == 0 || vestingElapsed >= bucket.vestingDuration) {
-            claimable = bucketTokens - claimedPerBucket[bucketIndex];
+            // claimedPerBucket[i] <= bucketTokens by invariant
+            unchecked { claimable = bucketTokens - claimedPerBucket[bucketIndex]; }
         } else {
-            claimable = (bucketTokens * vestingElapsed / bucket.vestingDuration)
-                        - claimedPerBucket[bucketIndex];
+            // vested fraction <= bucketTokens, and claimedPerBucket[i] <= vested fraction
+            unchecked {
+                claimable = (bucketTokens * vestingElapsed / bucket.vestingDuration)
+                            - claimedPerBucket[bucketIndex];
+            }
         }
 
         require(claimable > 0, "GradPad: nothing to claim");

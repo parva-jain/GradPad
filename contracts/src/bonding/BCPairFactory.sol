@@ -2,7 +2,6 @@
 pragma solidity ^0.8.25;
 
 import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
-import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
 import {IBCPair} from './IBCPair.sol';
 
 /// @title BCPairFactory - Bonding Curve Pair Factory
@@ -11,14 +10,16 @@ import {IBCPair} from './IBCPair.sol';
 contract BCPairFactory is Ownable {
     
     // ============ STATE VARIABLES ============
-    
+
     address public router;
     address public pairImpl;
-    
+
     // token0 (GradPad) => token1 (Asset) => pair
     mapping(address => mapping(address => address)) public getPair;
-    
+
     address[] public allPairs;
+
+    uint256 private _pairNonce;
     
     // ============ EVENTS ============
     
@@ -37,6 +38,7 @@ contract BCPairFactory is Ownable {
     error ZeroAddress();
     error PairExists();
     error InvalidRouter();
+    error CloneDeploymentFailed();
     
     // ============ CONSTRUCTOR ============
     
@@ -59,16 +61,9 @@ contract BCPairFactory is Ownable {
         if (getPair[token0][token1] != address(0)) revert PairExists();
         if (router == address(0)) revert InvalidRouter();
         
-        // Create new pair
-        bytes32 deploySalt;
-        assembly {
-            let ptr := mload(0x40)
-            mstore(ptr, shl(96, token0))
-            mstore(add(ptr, 0x14), shl(96, token1))
-            mstore(add(ptr, 0x28), timestamp())
-            deploySalt := keccak256(ptr, 0x48)
-        }
-        pair = Clones.cloneDeterministic(pairImpl, deploySalt);
+        // Create new pair — nonce prevents salt collisions on same-block deployments
+        bytes32 deploySalt = keccak256(abi.encodePacked(token0, token1, _pairNonce++));
+        pair = _cloneDeterministic(pairImpl, deploySalt);
 
         // Initialize pair
         IBCPair(pair).initialize(router, token0, token1);
@@ -95,10 +90,27 @@ contract BCPairFactory is Ownable {
     }
     
     // ============ VIEW FUNCTIONS ============
-    
+
     /// @notice Get total number of pairs
     function allPairsLength() external view returns (uint256) {
         return allPairs.length;
+    }
+
+    // ============ INTERNAL ============
+
+    /// @notice Deploy an EIP-1167 minimal proxy deterministically via CREATE2.
+    function _cloneDeterministic(address implementation, bytes32 salt)
+        private
+        returns (address instance)
+    {
+        assembly {
+            let ptr := mload(0x40)
+            mstore(ptr,         0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000)
+            mstore(add(ptr, 0x14), shl(0x60, implementation))
+            mstore(add(ptr, 0x28), 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000)
+            instance := create2(0, ptr, 0x37, salt)
+        }
+        if (instance == address(0)) revert CloneDeploymentFailed();
     }
 }
 
