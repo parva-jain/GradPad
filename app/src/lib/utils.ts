@@ -4,3 +4,27 @@ import { twMerge } from "tailwind-merge"
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
+
+export function shortenAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`
+}
+
+export function formatDecimal(value: string, decimals = 2): string {
+  const num = parseFloat(value)
+  if (isNaN(num)) return '0'
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(decimals)}M`
+  if (num >= 1_000) return `${(num / 1_000).toFixed(decimals)}K`
+  return num.toFixed(decimals)
+}
+
+export function secondsToDuration(seconds: number): string {
+  if (seconds === 0) return 'None'
+  const days = Math.floor(seconds / 86400)
+  const months = Math.floor(days / 30)
+  if (months > 0) return `${months} month${months > 1 ? 's' : ''}`
+  return `${days} day${days > 1 ? 's' : ''}`
+}
+
+export function basisPointsToPercent(bps: number): string {
+  return `${(bps / 100).toFixed(1)}%`
+}
