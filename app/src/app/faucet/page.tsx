@@ -1,18 +1,18 @@
 'use client'
 
-import { useAccount, useWriteContract, useReadContract } from 'wagmi'
+import { useEffect, useState } from 'react'
+import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { ADDRESSES, ABIS } from '@/lib/contracts'
 import { parseUnits, formatUnits } from 'viem'
-import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 
-const DAILY_LIMIT = parseUnits('1000', 6) // 1000 mUSDC in 6-decimal units
+const DAILY_LIMIT = parseUnits('1000', 6)
 const ZERO = BigInt(0)
 
 export default function FaucetPage() {
   const { address, isConnected } = useAccount()
-  const [txHash, setTxHash] = useState<string | null>(null)
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>(undefined)
 
   const { data: mintedToday, refetch: refetchMinted } = useReadContract({
     address: ADDRESSES.MockUSDC,
@@ -32,13 +32,26 @@ export default function FaucetPage() {
 
   const { writeContractAsync, isPending } = useWriteContract()
 
-  const mintedTodayBigInt = (mintedToday as bigint | undefined) ?? ZERO
-  const remainingToday =
-    mintedTodayBigInt < DAILY_LIMIT ? DAILY_LIMIT - mintedTodayBigInt : ZERO
-  const remainingDisplay = parseFloat(formatUnits(remainingToday, 6)).toFixed(0)
-  const balanceDisplay = balance
-    ? parseFloat(formatUnits(balance as bigint, 6)).toFixed(2)
-    : '0.00'
+  const { data: receipt } = useWaitForTransactionReceipt({
+    hash: txHash,
+    query: { enabled: !!txHash },
+  })
+
+  useEffect(() => {
+    if (receipt) {
+      refetchMinted()
+      refetchBalance()
+    }
+  }, [receipt, refetchMinted, refetchBalance])
+
+  const mintedTodayBigInt = typeof mintedToday === 'bigint' ? mintedToday : ZERO
+  const balanceBigInt = typeof balance === 'bigint' ? balance : ZERO
+  const remainingToday = mintedTodayBigInt < DAILY_LIMIT ? DAILY_LIMIT - mintedTodayBigInt : ZERO
+
+  const mintedPct = Number((mintedTodayBigInt * BigInt(100)) / DAILY_LIMIT)
+  const remainingDisplay = formatUnits(remainingToday, 6).split('.')[0]
+  const mintedDisplay = formatUnits(mintedTodayBigInt, 6).split('.')[0]
+  const balanceDisplay = parseFloat(formatUnits(balanceBigInt, 6)).toFixed(2)
 
   async function handleMint() {
     if (!address) return
@@ -47,17 +60,15 @@ export default function FaucetPage() {
         address: ADDRESSES.MockUSDC,
         abi: ABIS.MockUSDC,
         functionName: 'mint',
-        args: [parseUnits('1000', 6)], // mint(uint256) — 1000 mUSDC at 6 decimals
+        args: [parseUnits('1000', 6)],
       })
       setTxHash(hash)
-      setTimeout(() => {
-        refetchMinted()
-        refetchBalance()
-      }, 2000)
     } catch (err) {
       console.error('Mint failed:', err)
     }
   }
+
+  const isLimitReached = remainingToday === ZERO
 
   return (
     <main
@@ -82,7 +93,6 @@ export default function FaucetPage() {
           <ConnectButton />
         ) : (
           <>
-            {/* Balance and remaining */}
             <div
               className="rounded-xl p-4 space-y-2"
               style={{
@@ -98,7 +108,6 @@ export default function FaucetPage() {
                 <span className="text-muted-foreground">Remaining today</span>
                 <span className="font-bold text-white">{remainingDisplay} mUSDC</span>
               </div>
-              {/* Daily limit bar */}
               <div>
                 <div
                   className="h-1.5 w-full rounded-full mt-2"
@@ -107,16 +116,14 @@ export default function FaucetPage() {
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
-                      width: `${100 - (parseFloat(remainingDisplay) / 1000) * 100}%`,
+                      width: `${mintedPct}%`,
                       background: 'linear-gradient(90deg, #d97706, #fbbf24)',
                     }}
                   />
                 </div>
                 <div className="flex justify-between text-xs text-muted-foreground mt-1">
                   <span>Minted today</span>
-                  <span>
-                    {(1000 - parseFloat(remainingDisplay)).toFixed(0)} / 1000 mUSDC
-                  </span>
+                  <span>{mintedDisplay} / 1000 mUSDC</span>
                 </div>
               </div>
             </div>
@@ -124,22 +131,16 @@ export default function FaucetPage() {
             <Button
               className="w-full font-bold"
               onClick={handleMint}
-              disabled={isPending || remainingToday === ZERO}
+              disabled={isPending || isLimitReached}
               style={{
-                background:
-                  isPending || remainingToday === ZERO
-                    ? 'rgba(255,255,255,0.06)'
-                    : 'linear-gradient(90deg, #d97706, #fbbf24)',
-                color:
-                  isPending || remainingToday === ZERO ? '#6b7280' : '#0c0a06',
+                background: isPending || isLimitReached
+                  ? 'rgba(255,255,255,0.06)'
+                  : 'linear-gradient(90deg, #d97706, #fbbf24)',
+                color: isPending || isLimitReached ? '#6b7280' : '#0c0a06',
                 border: 'none',
               }}
             >
-              {isPending
-                ? 'Minting...'
-                : remainingToday === ZERO
-                  ? 'Daily limit reached'
-                  : 'Mint 1000 mUSDC'}
+              {isPending ? 'Minting...' : isLimitReached ? 'Daily limit reached' : 'Mint 1000 mUSDC'}
             </Button>
 
             {txHash && (
