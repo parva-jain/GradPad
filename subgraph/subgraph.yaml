@@ -1,0 +1,80 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+
+dataSources:
+  - kind: ethereum
+    name: GradPadFactory
+    network: base
+    source:
+      address: "0xc2AaE1Bdfb4D178B8a0D72750e10ffb98813948A"
+      abi: GradPadFactory
+      startBlock: 46936161
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - GradPadToken
+        - Bucket
+        - Trade
+        - User
+        - FeeEvent
+      abis:
+        - name: GradPadFactory
+          file: ./abis/GradPadFactory.json
+      eventHandlers:
+        - event: GPTokenCreated(indexed address,indexed address,string,string,uint256)
+          handler: handleGPTokenCreated
+        - event: BucketAdded(indexed address,indexed uint256,string,uint256,address,uint256,uint256,bool)
+          handler: handleBucketAdded
+        - event: GPTokenGraduated(indexed address,indexed address,uint256)
+          handler: handleGPTokenGraduated
+        - event: GPTokenBought(indexed address,indexed address,uint256,uint256)
+          handler: handleGPTokenBought
+        - event: GPTokenSold(indexed address,indexed address,uint256,uint256)
+          handler: handleGPTokenSold
+        - event: FeeCollected(indexed address,indexed address,uint256)
+          handler: handleFeeCollected
+      file: ./src/factory.ts
+
+templates:
+  - kind: ethereum
+    name: UniswapV2Pair
+    network: base
+    source:
+      abi: UniswapV2Pair
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Trade
+        - GradPadToken
+      abis:
+        - name: UniswapV2Pair
+          file: ./abis/UniswapV2Pair.json
+      eventHandlers:
+        - event: Swap(indexed address,uint256,uint256,uint256,uint256,indexed address)
+          handler: handleSwap
+      file: ./src/uniswap-pair.ts
+
+  - kind: ethereum
+    name: GradPadToken
+    network: base
+    source:
+      abi: GradPadToken
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Bucket
+        - BucketClaim
+      abis:
+        - name: GradPadToken
+          file: ./abis/GradPadToken.json
+      eventHandlers:
+        - event: BucketClaimed(indexed uint256,indexed address,uint256)
+          handler: handleBucketClaimed
+      file: ./src/token.ts

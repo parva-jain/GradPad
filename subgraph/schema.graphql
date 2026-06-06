@@ -1,0 +1,69 @@
+type GradPadToken @entity(immutable: false) {
+  id: ID!                         # token contract address (lowercase hex)
+  name: String!
+  symbol: String!
+  creator: Bytes!
+  createdAt: BigInt!
+  bondingPhase: Boolean!
+  graduatedAt: BigInt            # null until graduation
+  uniswapPair: Bytes             # null until graduation
+  totalVolume: BigDecimal!        # cumulative USDC volume across all trades (net of fees)
+  totalFeesCollected: BigDecimal! # cumulative platform fees collected on buys
+  tradeCount: BigInt!
+  buckets: [Bucket!]! @derivedFrom(field: "token")
+  trades: [Trade!]!   @derivedFrom(field: "token")
+  feeEvents: [FeeEvent!]! @derivedFrom(field: "token")
+}
+
+type Bucket @entity(immutable: false) {
+  id: ID!                         # "<tokenAddress>-<bucketIndex>"
+  token: GradPadToken!
+  index: BigInt!
+  name: String!
+  basisPoints: BigInt!
+  recipient: Bytes!
+  cliff: BigInt!                  # seconds
+  vestingDuration: BigInt!        # seconds (0 = instant)
+  isLiquidity: Boolean!
+  totalClaimed: BigDecimal!
+  claims: [BucketClaim!]! @derivedFrom(field: "bucket")
+}
+
+# Immutable — written once per trade, never updated.
+type Trade @entity(immutable: true) {
+  id: ID!                         # "<txHash>-<logIndex>"
+  token: GradPadToken!
+  trader: Bytes!
+  isBuy: Boolean!
+  amountIn: BigDecimal!           # USDC for buys, token for sells
+  amountOut: BigDecimal!          # token for buys, USDC for sells
+  price: BigDecimal!              # USDC per token at time of trade
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  phase: String!                  # "bonding" or "uniswap"
+}
+
+# Immutable — written once per claim event, never updated.
+type BucketClaim @entity(immutable: true) {
+  id: ID!                         # "<txHash>-<bucketIndex>"
+  bucket: Bucket!
+  recipient: Bytes!
+  amount: BigDecimal!
+  timestamp: BigInt!
+}
+
+type User @entity(immutable: false) {
+  id: ID!                         # wallet address (lowercase hex)
+  tradeCount: BigInt!
+  totalVolumeUSDC: BigDecimal!
+}
+
+# Immutable — written once per FeeCollected event, never updated.
+type FeeEvent @entity(immutable: true) {
+  id: ID!                         # "<txHash>-<logIndex>"
+  token: GradPadToken!
+  buyer: Bytes!
+  feeAmount: BigDecimal!          # USDC fee collected by the platform
+  timestamp: BigInt!
+  blockNumber: BigInt!
+}
