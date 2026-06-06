@@ -9,6 +9,8 @@ import { BondingProgressBar } from '@/components/token-detail/BondingProgressBar
 import { VestingTimeline } from '@/components/token-detail/VestingTimeline'
 import { formatDecimal, shortenAddress } from '@/lib/utils'
 import { BondingTradePanel } from '@/components/token-detail/BondingTradePanel'
+import { UniswapTradePanel } from '@/components/token-detail/UniswapTradePanel'
+import { ClaimPanel } from '@/components/token-detail/ClaimPanel'
 
 export default function TokenDetailPage() {
   const { address } = useParams<{ address: string }>()
@@ -123,17 +125,17 @@ export default function TokenDetailPage() {
               />
             )}
             {!token.bondingPhase && (
-              <div
-                className="rounded-2xl p-5 text-sm text-center"
-                style={{
-                  background: 'rgba(255,255,255,0.025)',
-                  border: '1px solid rgba(255,255,255,0.07)',
-                  color: '#6b7280',
-                }}
-              >
-                Uniswap trade panel — coming in Task 9
-              </div>
+              <UniswapTradePanel
+                tokenAddress={token.id as `0x${string}`}
+                tokenSymbol={token.symbol}
+                uniswapPair={token.uniswapPair ?? ''}
+              />
             )}
+            <ClaimPanel
+              tokenAddress={token.id as `0x${string}`}
+              buckets={token.buckets}
+              graduatedAt={token.graduatedAt}
+            />
           </div>
         </div>
       </div>
