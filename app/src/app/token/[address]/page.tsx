@@ -8,6 +8,7 @@ import { PriceChart } from '@/components/token-detail/PriceChart'
 import { BondingProgressBar } from '@/components/token-detail/BondingProgressBar'
 import { VestingTimeline } from '@/components/token-detail/VestingTimeline'
 import { formatDecimal, shortenAddress } from '@/lib/utils'
+import { BondingTradePanel } from '@/components/token-detail/BondingTradePanel'
 
 export default function TokenDetailPage() {
   const { address } = useParams<{ address: string }>()
@@ -112,17 +113,27 @@ export default function TokenDetailPage() {
           )}
         </div>
 
-        {/* Right column — Trade panel placeholder (Task 8 will replace) */}
+        {/* Right column — Trade panel */}
         <div className="lg:col-span-1">
-          <div
-            className="rounded-2xl p-5 text-sm text-center sticky top-20"
-            style={{
-              background: 'rgba(255,255,255,0.025)',
-              border: '1px solid rgba(255,255,255,0.07)',
-              color: '#6b7280',
-            }}
-          >
-            Trade panel — coming in next task
+          <div className="sticky top-20 space-y-4">
+            {token.bondingPhase && (
+              <BondingTradePanel
+                tokenAddress={token.id as `0x${string}`}
+                tokenSymbol={token.symbol}
+              />
+            )}
+            {!token.bondingPhase && (
+              <div
+                className="rounded-2xl p-5 text-sm text-center"
+                style={{
+                  background: 'rgba(255,255,255,0.025)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  color: '#6b7280',
+                }}
+              >
+                Uniswap trade panel — coming in Task 9
+              </div>
+            )}
           </div>
         </div>
       </div>
