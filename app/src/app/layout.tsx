@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Plus_Jakarta_Sans, Geist_Mono } from 'next/font/google'
 import { Providers } from '@/components/layout/Providers'
+import { Navbar } from '@/components/layout/Navbar'
 import './globals.css'
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -27,7 +28,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${plusJakartaSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <Providers>{children}</Providers>
+        <Providers>
+          <Navbar />
+          {children}
+        </Providers>
       </body>
     </html>
   )
