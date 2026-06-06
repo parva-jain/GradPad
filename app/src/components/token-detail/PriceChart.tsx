@@ -46,7 +46,7 @@ export function PriceChart({ trades }: Props) {
               borderRadius: '8px',
               color: '#fff',
             }}
-            // @ts-ignore — recharts v3 ValueType is wider than number
+            // @ts-expect-error — recharts v3 ValueType is wider than number
             formatter={(v: number) => [`$${v.toFixed(6)}`, 'Price']}
           />
           <Line

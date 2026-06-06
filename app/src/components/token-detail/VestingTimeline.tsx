@@ -1,3 +1,6 @@
+'use client'
+
+import { useMemo } from 'react'
 import { Bucket } from '@/types'
 import { secondsToDuration, basisPointsToPercent } from '@/lib/utils'
 
@@ -7,7 +10,8 @@ interface Props {
 }
 
 export function VestingTimeline({ bucket, graduatedAt }: Props) {
-  const now = Date.now() / 1000
+  // eslint-disable-next-line react-hooks/purity
+  const now = useMemo(() => Date.now() / 1000, [])
   const gradTime = graduatedAt ? parseInt(graduatedAt) : null
 
   let cliffPct = 0

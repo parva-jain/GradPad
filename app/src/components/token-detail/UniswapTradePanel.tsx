@@ -44,9 +44,8 @@ export function UniswapTradePanel({ tokenAddress, tokenSymbol }: Props) {
   const [error, setError] = useState<string | null>(null)
   const { writeContractAsync, isPending } = useWriteContract()
 
-  const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
-
   async function handleBuy() {
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
     if (!amount || !address) return
     setError(null)
     try {
@@ -73,6 +72,7 @@ export function UniswapTradePanel({ tokenAddress, tokenSymbol }: Props) {
   async function handleSell() {
     if (!amount || !address) return
     setError(null)
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
     try {
       // Approve GP token → Uniswap router
       await writeContractAsync({
