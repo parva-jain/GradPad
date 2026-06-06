@@ -24,7 +24,7 @@ export interface GradPadToken {
   totalVolume: string
   tradeCount: string
   buckets: Bucket[]
-  trades: Trade[]
+  trades?: Trade[]
 }
 
 export interface Trade {
