@@ -189,6 +189,79 @@ After deployment, update `subgraph/subgraph.yaml` with the proxy address and dep
 
 ---
 
+## Interact (create / buy / sell on mainnet)
+
+`script/Interact.s.sol` runs three steps in one broadcast against the already-deployed contracts on Base mainnet:
+
+1. **Create** a new GP token with a 70 % Liquidity bucket and a 30 % Team bucket that vests to your address (30-day cliff, 90-day linear vest).
+2. **Mint** up to 500 mUSDC from the faucet (respects the 1 000/day per-address limit).
+3. **Buy** GP tokens with the minted mUSDC.
+4. **Sell** half the received tokens back for mUSDC.
+
+### Deployed addresses (Base mainnet, chain 8453)
+
+| Contract | Address |
+|---|---|
+| `MockUSDC` | `0x7b851635eea924e8501e733909fcf91ab1b98348` |
+| `GradPadFactoryV1` proxy | `0xc2aae1bdfb4d178b8a0d72750e10ffb98813948a` |
+
+### Prerequisites
+
+Ensure `DEPLOYER_PRIVATE_KEY` and `BASE_RPC_URL` are set (see [Setup](#setup)).
+
+### Create a new token, buy, and sell in one command
+
+```bash
+forge script script/Interact.s.sol \
+  --rpc-url $BASE_RPC_URL \
+  --broadcast \
+  -vvvv
+```
+
+### Skip token creation — use an existing token
+
+Set `TOKEN_ADDRESS` to an already-deployed GP token address and the script will skip step 1:
+
+```bash
+export TOKEN_ADDRESS=0x...
+
+forge script script/Interact.s.sol \
+  --rpc-url $BASE_RPC_URL \
+  --broadcast \
+  -vvvv
+```
+
+### Dry run (no broadcast)
+
+Omit `--broadcast` to simulate the full flow and print expected outputs without sending any transactions:
+
+```bash
+forge script script/Interact.s.sol \
+  --rpc-url $BASE_RPC_URL \
+  -vvvv
+```
+
+### Customising the token
+
+Edit the constants at the top of `script/Interact.s.sol`:
+
+| Constant | Default | Description |
+|---|---|---|
+| `TOKEN_NAME` | `"My GP Token"` | ERC20 name |
+| `TOKEN_SYMBOL` | `"MGP"` | ERC20 ticker |
+| `TOTAL_SUPPLY` | `1 000 000 ether` | Total token supply |
+| `GRAD_THRESHOLD` | `10 000 mUSDC` | mUSDC collected before graduation |
+| `VIRTUAL_RESERVE` | `1 000 mUSDC` | Synthetic starting reserve (sets initial price) |
+| `BUY_AMOUNT` | `500 mUSDC` | mUSDC to spend on the buy step |
+
+### Notes
+
+- **Daily mint cap** — MockUSDC allows at most 1 000 mUSDC per address per UTC day. If the cap is already reached the script uses whatever balance the address already holds.
+- **Graduation** — if a single buy crosses the `GRAD_THRESHOLD`, the token graduates automatically during the buy. The sell step is skipped in that case because the token moves to Uniswap V2.
+- **Slippage** — both buy and sell pass `minOut = 0`. Add a non-zero value for production use to protect against front-running.
+
+---
+
 ## Upgrading
 
 ```solidity
