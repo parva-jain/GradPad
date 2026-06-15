@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { TOKENS_QUERY } from '@/lib/queries'
 import { TokenGrid } from '@/components/discover/TokenGrid'
 import { GradPadToken } from '@/types'
+import { formatUrqlError } from '@/lib/utils'
 
 type SortField = 'createdAt' | 'totalVolume' | 'tradeCount'
 
@@ -42,7 +43,10 @@ export default function DiscoverPage() {
           <div className="text-center py-24 text-muted-foreground">Loading tokens...</div>
         )}
         {error && (
-          <div className="text-center py-24 text-red-400">Error: {error.message}</div>
+          <div className="text-center py-24 space-y-2">
+            <p className="text-red-400 font-semibold">Failed to load tokens</p>
+            <p className="text-sm text-muted-foreground">{formatUrqlError(error)}</p>
+          </div>
         )}
         {!fetching && !error && (
           <TokenGrid tokens={data?.gradPadTokens ?? []} />

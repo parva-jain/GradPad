@@ -37,6 +37,8 @@ export default function FaucetPage() {
     query: { enabled: !!txHash },
   })
 
+  const isConfirming = !!txHash && !receipt
+
   useEffect(() => {
     if (receipt) {
       refetchMinted()
@@ -131,27 +133,38 @@ export default function FaucetPage() {
             <Button
               className="w-full font-bold"
               onClick={handleMint}
-              disabled={isPending || isLimitReached}
+              disabled={isPending || isConfirming || isLimitReached}
               style={{
-                background: isPending || isLimitReached
+                background: isPending || isConfirming || isLimitReached
                   ? 'rgba(255,255,255,0.06)'
                   : 'linear-gradient(90deg, #d97706, #fbbf24)',
-                color: isPending || isLimitReached ? '#6b7280' : '#0c0a06',
+                color: isPending || isConfirming || isLimitReached ? '#6b7280' : '#0c0a06',
                 border: 'none',
               }}
             >
-              {isPending ? 'Minting...' : isLimitReached ? 'Daily limit reached' : 'Mint 1000 mUSDC'}
+              {isPending
+                ? 'Confirm in wallet...'
+                : isConfirming
+                ? 'Confirming on-chain...'
+                : isLimitReached
+                ? 'Daily limit reached'
+                : 'Mint 1000 mUSDC'}
             </Button>
 
-            {txHash && (
+            {isConfirming && (
+              <p className="text-xs text-center text-muted-foreground">
+                Waiting for the transaction to be included in a block...
+              </p>
+            )}
+            {receipt && txHash && (
               <a
                 href={`https://basescan.org/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block text-center text-xs hover:underline"
-                style={{ color: '#fbbf24' }}
+                style={{ color: '#34d399' }}
               >
-                View on BaseScan ↗
+                Minted — View on BaseScan ↗
               </a>
             )}
           </>

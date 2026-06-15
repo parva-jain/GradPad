@@ -7,7 +7,7 @@ import { GradPadToken } from '@/types'
 import { PriceChart } from '@/components/token-detail/PriceChart'
 import { BondingProgressBar } from '@/components/token-detail/BondingProgressBar'
 import { VestingTimeline } from '@/components/token-detail/VestingTimeline'
-import { formatDecimal, shortenAddress } from '@/lib/utils'
+import { formatDecimal, shortenAddress, formatUrqlError } from '@/lib/utils'
 import { BondingTradePanel } from '@/components/token-detail/BondingTradePanel'
 import { UniswapTradePanel } from '@/components/token-detail/UniswapTradePanel'
 import { ClaimPanel } from '@/components/token-detail/ClaimPanel'
@@ -25,9 +25,15 @@ export default function TokenDetailPage() {
       <p className="text-muted-foreground">Loading...</p>
     </div>
   )
-  if (error || !data?.gradPadToken) return (
+  if (error) return (
+    <div className="flex flex-col items-center justify-center min-h-screen gap-2">
+      <p className="text-red-400 font-semibold">Failed to load token</p>
+      <p className="text-sm text-muted-foreground">{formatUrqlError(error)}</p>
+    </div>
+  )
+  if (!data?.gradPadToken) return (
     <div className="flex items-center justify-center min-h-screen">
-      <p className="text-red-400">Token not found</p>
+      <p className="text-muted-foreground">Token not found</p>
     </div>
   )
 

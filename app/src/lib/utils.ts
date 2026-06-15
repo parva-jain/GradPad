@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import type { CombinedError } from 'urql'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -27,4 +28,18 @@ export function secondsToDuration(seconds: number): string {
 
 export function basisPointsToPercent(bps: number): string {
   return `${(bps / 100).toFixed(1)}%`
+}
+
+export function formatUrqlError(error: CombinedError): string {
+  const msg = error.message
+  if (msg.includes('<!DOCTYPE') || msg.includes('<html')) {
+    return 'Unable to reach the subgraph — the endpoint may be misconfigured or temporarily down.'
+  }
+  if (msg.startsWith('[Network]')) {
+    return 'Network error: unable to connect to the data source. Check your internet connection.'
+  }
+  if (error.graphQLErrors.length > 0) {
+    return error.graphQLErrors[0].message
+  }
+  return 'Something went wrong. Please try again.'
 }
