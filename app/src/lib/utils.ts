@@ -21,9 +21,7 @@ export function formatDecimal(value: string, decimals = 2): string {
 export function secondsToDuration(seconds: number): string {
   if (seconds === 0) return 'None'
   const days = Math.floor(seconds / 86400)
-  const months = Math.floor(days / 30)
-  if (months > 0) return `${months} month${months > 1 ? 's' : ''}`
-  return `${days} day${days > 1 ? 's' : ''}`
+  return `${days} day${days !== 1 ? 's' : ''}`
 }
 
 export function basisPointsToPercent(bps: number): string {

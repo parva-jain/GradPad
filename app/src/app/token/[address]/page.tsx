@@ -6,7 +6,7 @@ import { TOKEN_DETAIL_QUERY } from '@/lib/queries'
 import { GradPadToken } from '@/types'
 import { PriceChart } from '@/components/token-detail/PriceChart'
 import { BondingProgressBar } from '@/components/token-detail/BondingProgressBar'
-import { VestingTimeline } from '@/components/token-detail/VestingTimeline'
+import { TokenomicsPieChart } from '@/components/token-detail/TokenomicsPieChart'
 import { formatDecimal, shortenAddress, formatUrqlError } from '@/lib/utils'
 import { BondingTradePanel } from '@/components/token-detail/BondingTradePanel'
 import { UniswapTradePanel } from '@/components/token-detail/UniswapTradePanel'
@@ -102,7 +102,7 @@ export default function TokenDetailPage() {
             ))}
           </div>
 
-          {/* Tokenomics / vesting */}
+          {/* Tokenomics */}
           {token.buckets.length > 0 && (
             <div
               className="rounded-2xl p-5 space-y-4"
@@ -112,11 +112,7 @@ export default function TokenDetailPage() {
               }}
             >
               <h2 className="text-base font-bold text-white">Tokenomics</h2>
-              <div className="space-y-4">
-                {token.buckets.map(bucket => (
-                  <VestingTimeline key={bucket.id} bucket={bucket} graduatedAt={token.graduatedAt} />
-                ))}
-              </div>
+              <TokenomicsPieChart buckets={token.buckets} />
             </div>
           )}
         </div>
