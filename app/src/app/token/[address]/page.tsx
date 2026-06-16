@@ -15,10 +15,16 @@ import { ClaimPanel } from '@/components/token-detail/ClaimPanel'
 export default function TokenDetailPage() {
   const { address } = useParams<{ address: string }>()
 
-  const [{ data, fetching, error }] = useQuery<{ gradPadToken: GradPadToken }>({
+  const [{ data, fetching, error }, reexecuteQuery] = useQuery<{ gradPadToken: GradPadToken }>({
     query: TOKEN_DETAIL_QUERY,
     variables: { address: address.toLowerCase() },
   })
+
+  function onTradeSuccess() {
+    // Refetch twice — subgraph indexing on Base takes 10–30s
+    setTimeout(() => reexecuteQuery({ requestPolicy: 'network-only' }), 12_000)
+    setTimeout(() => reexecuteQuery({ requestPolicy: 'network-only' }), 30_000)
+  }
 
   if (fetching) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -124,6 +130,7 @@ export default function TokenDetailPage() {
               <BondingTradePanel
                 tokenAddress={token.id as `0x${string}`}
                 tokenSymbol={token.symbol}
+                onTradeSuccess={onTradeSuccess}
               />
             )}
             {!token.bondingPhase && (

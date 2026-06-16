@@ -44,8 +44,8 @@ export function TokenomicsPieChart({ buckets }: Props) {
                 color: '#fff',
                 fontSize: 12,
               }}
-              // @ts-expect-error — recharts v3 ValueType is wider than number
-              formatter={(value: number) => [`${value}%`, '']}
+              // @ts-expect-error — recharts v3 ValueType / NameType are wider than number/string
+              formatter={(value: number, name: string) => [`${name}: ${value}%`, '']}
             />
           </PieChart>
         </ResponsiveContainer>
