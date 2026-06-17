@@ -1,0 +1,110 @@
+[
+  {
+    "name": "Crazy Cat Lady",
+    "symbol": "CCAT",
+    "description": "A community-driven token celebrating internet cat culture. Holders receive exclusive cat-themed NFTs.",
+    "type": "meme",
+    "tagline": "Feline Frenzy",
+    "address": "0x1b356E4608240A9908ac3e1dC2226Ecd37cF85B4",
+    "willGraduate": true
+  },
+  {
+    "name": "YieldMAX Protocol",
+    "symbol": "YMPI",
+    "description": "A cross-chain DeFi platform offering high-yield farming and lending services. Users can stake assets to earn rewards.",
+    "type": "protocol",
+    "tagline": "Maximize Yield",
+    "address": "0x228Db8210BecD7BFA1dBf4fcDc21e463c0d70ad2",
+    "willGraduate": true
+  },
+  {
+    "name": "Pupper Coin",
+    "symbol": "PUPX",
+    "description": "A fun, community-driven token with a canine twist. PUPX holders can participate in dog-themed giveaways and contests.",
+    "type": "meme",
+    "tagline": "Pawsome Rewards",
+    "address": "0x0Ae23E8E9e2B05A83b91C07D1BD4712103f6A743",
+    "willGraduate": false
+  },
+  {
+    "name": "AIBridge Network",
+    "symbol": "ABNI",
+    "description": "An AI-powered cross-chain bridge designed for seamless asset transfers. ABNI enables fast and secure transactions between blockchains.",
+    "type": "protocol",
+    "tagline": "Smart Bridge",
+    "address": "0x767AeA0baFC61dA25A0F8aC6b29D175857A81c88",
+    "willGraduate": false
+  },
+  {
+    "name": "Tasty Tacos",
+    "symbol": "TACO",
+    "description": "A food-themed token celebrating the joy of tacos. TACO holders can participate in culinary-themed events and contests.",
+    "type": "meme",
+    "tagline": "Tasty Rewards",
+    "address": "0xb5B510621AD492128E718479DCDD505Cd22Af513",
+    "willGraduate": false
+  },
+  {
+    "name": "RealWorld Assets",
+    "symbol": "RWAX",
+    "description": "A DeFi platform offering tokenized real-world assets, such as real estate and commodities. RWAX enables secure and transparent asset ownership.",
+    "type": "protocol",
+    "tagline": "Asset Security",
+    "address": "0x65ae09CfCde562E92B6eeFe56Bf3e32F52D3a743",
+    "willGraduate": false
+  },
+  {
+    "name": "Llama Party",
+    "symbol": "LLMP",
+    "description": "A fun, community-driven token featuring llamas. LLMP holders can participate in exclusive events and contests.",
+    "type": "meme",
+    "tagline": "Party Time",
+    "address": "0x6F19CE1d7A1fA07428Bb8749fF1Dd1ec5e22C663",
+    "willGraduate": false
+  },
+  {
+    "name": "CryptoGuard Protocol",
+    "symbol": "CGPA",
+    "description": "A decentralized security protocol designed to protect user assets. CGPA offers advanced threat detection and risk management.",
+    "type": "protocol",
+    "tagline": "Secure Assets",
+    "address": "0x87596BFF4cc4fdCe76EC1042aDe3b64b03124F12",
+    "willGraduate": false
+  },
+  {
+    "name": "Sushi Squad",
+    "symbol": "SUSH",
+    "description": "A food-themed token celebrating the love of sushi. SUSH holders can participate in culinary-themed events and contests.",
+    "type": "meme",
+    "tagline": "Rolling Rewards",
+    "address": "0x5E86f8B96208769c5849702027f3938A2f226168",
+    "willGraduate": false
+  },
+  {
+    "name": "YieldFarm Protocol",
+    "symbol": "YFAR",
+    "description": "A DeFi platform offering high-yield farming and staking services. YFAR users can earn rewards by staking assets.",
+    "type": "protocol",
+    "tagline": "Farm Rewards",
+    "address": "0x9e65ccc73B9feb4CaD45d38c34aA4614179B3bA6",
+    "willGraduate": false
+  },
+  {
+    "name": "AI Agent Network",
+    "symbol": "AANI",
+    "description": "A decentralized AI network designed for autonomous decision-making. AANI enables secure and transparent AI-powered transactions.",
+    "type": "protocol",
+    "tagline": "Smart Agents",
+    "address": "0x0D9c351a680e5aC6a693e3C147C0903cecc11a72",
+    "willGraduate": false
+  },
+  {
+    "name": "Bubble Tea Club",
+    "symbol": "BTCL",
+    "description": "A community-driven token featuring bubble tea. BTCL holders can participate in exclusive events and contests.",
+    "type": "meme",
+    "tagline": "Tea Time",
+    "address": "0x520b0292d0186B3910411D934c64679919E077F3",
+    "willGraduate": false
+  }
+]
