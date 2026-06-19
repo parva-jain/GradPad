@@ -2,30 +2,74 @@
 
 Indexes all GradPad contract events on Base mainnet and exposes a GraphQL API for the frontend.
 
-## Architecture
+---
 
-- **`GradPadFactory` data source** — token creation (`GPTokenCreated`, `BucketAdded`), graduation (`GPTokenGraduated`), and all bonding-curve trades (`GPTokenBought`, `GPTokenSold`).
-- **`UniswapV2Pair` template** — post-graduation Uniswap `Swap` events. A new data source instance is created dynamically for each token's pair at graduation.
-- **`GradPadToken` template** — `BucketClaimed` events from each EIP-1167 clone. A new instance is created for each token at launch.
+## Deployed endpoint — Base mainnet
 
-BCRouter is internal (`EXECUTOR_ROLE` gated) and not indexed — all user-visible events are emitted by GradPadFactory.
+```
+https://api.studio.thegraph.com/query/50551/gradpad/v0.0.2
+```
+
+Indexed from block `46936161` (GradPadFactory proxy deployment).
+
+---
+
+## What gets indexed
+
+| Data source | Events | Entities produced |
+|---|---|---|
+| `GradPadFactory` (proxy) | `GPTokenCreated`, `BucketAdded`, `GPTokenBought`, `GPTokenSold`, `GPTokenGraduated`, `FeeCollected` | `GradPadToken`, `Bucket`, `Trade`, `User`, `FeeEvent` |
+| `UniswapV2Pair` (template) | `Swap` | `Trade` (phase = `uniswap`) |
+| `GradPadToken` (template) | `BucketClaimed` | `BucketClaim` |
+
+A `UniswapV2Pair` and `GradPadToken` data source instance is created dynamically for each token at the point it is indexed. `BCRouter` is internal (`EXECUTOR_ROLE` gated) and not indexed — all user-visible events are emitted by the factory.
+
+---
+
+## Schema overview
+
+```graphql
+type GradPadToken {
+  id: ID!                   # token contract address (lowercase)
+  name, symbol, creator
+  bondingPhase: Boolean!    # false once graduated
+  graduatedAt: BigInt       # unix timestamp, null during bonding
+  uniswapPair: String       # pair address, null during bonding
+  totalVolume: BigDecimal!  # cumulative USDC volume (buys + sells)
+  tradeCount: BigInt!
+  buckets: [Bucket!]!
+  trades: [Trade!]!
+}
+
+type Bucket {
+  index, name, basisPoints, recipient
+  cliff, vestingDuration, isLiquidity
+  totalClaimed: BigDecimal!
+}
+
+type Trade {
+  trader: Bytes!
+  isBuy: Boolean!
+  amountIn: BigDecimal!    # USDC for buys, tokens for sells (already normalised)
+  amountOut: BigDecimal!   # tokens for buys, USDC for sells (already normalised)
+  price: BigDecimal!       # USDC per token at time of trade
+  timestamp: BigInt!
+  phase: String!           # "bonding" or "uniswap"
+}
+```
+
+All `BigDecimal` amounts are already normalised (divided by the appropriate decimals) — no further conversion needed in the frontend.
+
+---
 
 ## Setup
 
 ```bash
+cd subgraph
 npm install
 ```
 
-## Before deploying — fill in contract addresses
-
-Edit `subgraph.yaml` and replace the two placeholder values:
-
-```yaml
-address: "0x0000000000000000000000000000000000000000"  # → deployed GradPadFactory address
-startBlock: 0                                           # → block number of GradPadFactory deployment
-```
-
-Get the deployment block from the tx on BaseScan. Using the exact deploy block (not 0) avoids scanning unnecessary history.
+---
 
 ## Commands
 
@@ -33,27 +77,36 @@ Get the deployment block from the tx on BaseScan. Using the exact deploy block (
 # Regenerate AssemblyScript types after schema or ABI changes
 npm run codegen
 
-# Compile mappings to WASM and verify there are no errors
+# Compile mappings to WASM and validate
 npm run build
 
-# Deploy to The Graph Studio (requires: graph auth --studio <DEPLOY_KEY>)
+# Deploy to The Graph Studio (authenticate first — see below)
 npm run deploy
 ```
 
+---
+
 ## Deploying to The Graph Studio
 
-1. Go to https://thegraph.com/studio — create a subgraph named `gradpad`, network `Base`.
+1. Go to [thegraph.com/studio](https://thegraph.com/studio) and create a subgraph named `gradpad` on the Base network.
 2. Authenticate: `graph auth --studio <DEPLOY_KEY>`
-3. Fill in the address and startBlock in `subgraph.yaml`
-4. `npm run deploy` — use version label `v0.1.0`
+3. Set `address` and `startBlock` in `subgraph.yaml` (already filled for the current mainnet deployment).
+4. `npm run deploy` — use version label `v0.0.2` (or bump for a new version).
 
-## Endpoints
+For a fresh contract deployment, update `subgraph.yaml`:
 
-Query URL: (fill in after deploying)
+```yaml
+source:
+  address: "0x<new_factory_proxy_address>"
+  startBlock: <deployment_block_number>
 ```
-https://api.studio.thegraph.com/query/<id>/gradpad/v0.1.0
-```
 
-## Pair ordering note
+Get the deployment block from the transaction on [BaseScan](https://basescan.org). Using the exact block (not 0) avoids scanning unnecessary history.
 
-In `uniswap-pair.ts`, the swap direction heuristic assumes `token0 = GradPadToken` and `token1 = MockUSDC`. Uniswap V2 orders tokens by address (`lower < higher`). If the deployed GradPadToken address is numerically higher than MockUSDC, the ordering is reversed — swap the `amount0`/`amount1` references in `handleSwap`. Verify by checking `IUniswapV2Factory.getPair(gradPadToken, mockUSDC)` and then `IUniswapV2Pair.token0()` on the pair.
+---
+
+## Uniswap pair token ordering
+
+Uniswap V2 orders tokens by address (lower address = `token0`). The `uniswap-pair.ts` mapping determines swap direction by comparing `token0` to the known MockUSDC address at runtime, so it handles both orderings correctly regardless of which address is numerically lower.
+
+If you redeploy with different contract addresses and see reversed trade directions in the data, check `IUniswapV2Pair.token0()` on any graduated pair and verify it matches what the mapping expects.
