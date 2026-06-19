@@ -1,15 +1,28 @@
+'use client'
+
 import Link from 'next/link'
+import { useReadContract } from 'wagmi'
 import { GradPadToken } from '@/types'
 import { formatDecimal } from '@/lib/utils'
+import { ADDRESSES, ABIS } from '@/lib/contracts'
 
 interface Props {
   token: GradPadToken
 }
 
-const GRADUATION_THRESHOLD = 100_000 // USDC
-
 export function TokenCard({ token }: Props) {
-  const progress = Math.min((parseFloat(token.totalVolume) / GRADUATION_THRESHOLD) * 100, 100)
+  const { data: thresholdRaw } = useReadContract({
+    address: ADDRESSES.GradPadFactory,
+    abi: ABIS.GradPadFactory,
+    functionName: 'graduationThreshold',
+    args: [token.id as `0x${string}`],
+  })
+
+  // thresholdRaw is in 6-decimal USDC units; totalVolume is already a decimal string
+  const threshold = thresholdRaw ? Number(thresholdRaw) / 1e6 : null
+  const progress = threshold && threshold > 0
+    ? Math.min((parseFloat(token.totalVolume) / threshold) * 100, 100)
+    : 0
   const isGraduated = !token.bondingPhase
 
   return (

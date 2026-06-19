@@ -80,6 +80,7 @@ export default function TokenDetailPage() {
           <BondingProgressBar
             bondingPhase={token.bondingPhase}
             totalVolume={token.totalVolume}
+            tokenAddress={token.id}
           />
 
           {/* Token stats */}
