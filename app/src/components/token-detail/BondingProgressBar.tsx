@@ -3,18 +3,36 @@
 import { useReadContract } from 'wagmi'
 import { ADDRESSES, ABIS } from '@/lib/contracts'
 
+const BC_PAIR_ABI = [
+  { name: 'assetBalance', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+] as const
+
 interface Props {
   bondingPhase: boolean
-  totalVolume: string
   tokenAddress: string
 }
 
-export function BondingProgressBar({ bondingPhase, totalVolume, tokenAddress }: Props) {
+export function BondingProgressBar({ bondingPhase, tokenAddress }: Props) {
   const { data: thresholdRaw } = useReadContract({
     address: ADDRESSES.GradPadFactory,
     abi: ABIS.GradPadFactory,
     functionName: 'graduationThreshold',
     args: [tokenAddress as `0x${string}`],
+  })
+
+  const { data: pairAddress } = useReadContract({
+    address: ADDRESSES.GradPadFactory,
+    abi: ABIS.GradPadFactory,
+    functionName: 'tokenToPair',
+    args: [tokenAddress as `0x${string}`],
+    query: { enabled: bondingPhase },
+  })
+
+  const { data: assetBalanceRaw } = useReadContract({
+    address: pairAddress as `0x${string}` | undefined,
+    abi: BC_PAIR_ABI,
+    functionName: 'assetBalance',
+    query: { enabled: bondingPhase && !!pairAddress },
   })
 
   if (!bondingPhase) {
@@ -37,19 +55,21 @@ export function BondingProgressBar({ bondingPhase, totalVolume, tokenAddress }: 
     )
   }
 
-  const raised = parseFloat(totalVolume)
-  // thresholdRaw is in 6-decimal USDC units; totalVolume is already a decimal string
+  // Use real net USDC in BCPair (assetBalance), not totalVolume which is inflated by sells
   const threshold = thresholdRaw ? Number(thresholdRaw) / 1e6 : 0
-  const pct = threshold > 0 ? Math.min((raised / threshold) * 100, 100) : 0
+  const netUsdc   = assetBalanceRaw !== undefined ? Number(assetBalanceRaw) / 1e6 : null
+  const pct       = threshold > 0 && netUsdc !== null ? Math.min((netUsdc / threshold) * 100, 100) : 0
 
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs" style={{ color: '#6b7280' }}>
         <span>Bonding progress</span>
         <span>
-          {threshold > 0
-            ? `${pct.toFixed(1)}% · $${raised.toFixed(0)} / $${threshold.toLocaleString()} target`
-            : `$${raised.toFixed(0)} raised`}
+          {threshold > 0 && netUsdc !== null
+            ? `${pct.toFixed(1)}% · $${netUsdc.toFixed(0)} / $${threshold.toLocaleString()} target`
+            : threshold > 0
+              ? 'Loading...'
+              : ''}
         </span>
       </div>
       <div className="h-1.5 w-full rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>

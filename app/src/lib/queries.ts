@@ -19,8 +19,8 @@ export const TOKEN_DETAIL_QUERY = `
       buckets {
         id index name basisPoints recipient cliff vestingDuration isLiquidity totalClaimed
       }
-      trades(first: 200, orderBy: timestamp, orderDirection: asc) {
-        id isBuy amountIn amountOut price timestamp phase
+      trades(first: 500, orderBy: timestamp, orderDirection: asc) {
+        id trader isBuy amountIn amountOut price timestamp phase
       }
     }
   }

@@ -10,7 +10,13 @@ interface Props {
   token: GradPadToken
 }
 
+const BC_PAIR_ABI = [
+  { name: 'assetBalance', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+] as const
+
 export function TokenCard({ token }: Props) {
+  const isGraduated = !token.bondingPhase
+
   const { data: thresholdRaw } = useReadContract({
     address: ADDRESSES.GradPadFactory,
     abi: ABIS.GradPadFactory,
@@ -18,12 +24,33 @@ export function TokenCard({ token }: Props) {
     args: [token.id as `0x${string}`],
   })
 
-  // thresholdRaw is in 6-decimal USDC units; totalVolume is already a decimal string
+  // Only need on-chain balance for bonding tokens; graduated = always 100%
+  const { data: pairAddress } = useReadContract({
+    address: ADDRESSES.GradPadFactory,
+    abi: ABIS.GradPadFactory,
+    functionName: 'tokenToPair',
+    args: [token.id as `0x${string}`],
+    query: { enabled: !isGraduated },
+  })
+
+  const { data: assetBalanceRaw } = useReadContract({
+    address: pairAddress as `0x${string}` | undefined,
+    abi: BC_PAIR_ABI,
+    functionName: 'assetBalance',
+    query: { enabled: !isGraduated && !!pairAddress },
+  })
+
+  // Progress = real net USDC in BCPair / graduation threshold.
+  // Using assetBalance (not totalVolume) because sells reduce BCPair USDC
+  // while still adding to totalVolume — totalVolume can exceed the threshold
+  // even when the token is nowhere near graduation.
   const threshold = thresholdRaw ? Number(thresholdRaw) / 1e6 : null
-  const progress = threshold && threshold > 0
-    ? Math.min((parseFloat(token.totalVolume) / threshold) * 100, 100)
-    : 0
-  const isGraduated = !token.bondingPhase
+  const netUsdc   = assetBalanceRaw !== undefined ? Number(assetBalanceRaw) / 1e6 : null
+  const progress  = isGraduated
+    ? 100
+    : threshold && netUsdc !== null
+      ? Math.min((netUsdc / threshold) * 100, 100)
+      : 0
 
   return (
     <>
