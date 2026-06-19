@@ -15,9 +15,39 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+// NEXT_PUBLIC_SITE_URL → custom domain (set in Vercel env vars)
+// VERCEL_URL          → auto-set by Vercel on every deployment (not NEXT_PUBLIC so server-only)
+// fallback            → localhost for local dev
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+
 export const metadata: Metadata = {
-  title: 'GradPad — Token Launchpad',
-  description: 'Launch tokens with flexible tokenomics and bonding curve price discovery',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'GradPad — Token Launchpad on Base',
+    template: '%s — GradPad',
+  },
+  description:
+    'Launch meme and protocol tokens on Base with built-in liquidity bootstrapping. No upfront capital required — tokens start on a bonding curve and automatically graduate to Uniswap V2.',
+  keywords: ['token launchpad', 'bonding curve', 'Base', 'DeFi', 'meme token', 'Uniswap'],
+  openGraph: {
+    type: 'website',
+    siteName: 'GradPad',
+    title: 'GradPad — Token Launchpad on Base',
+    description:
+      'Launch tokens with built-in liquidity bootstrapping. Bonding curve → Uniswap V2, no upfront capital.',
+    url: SITE_URL,
+    images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'GradPad' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'GradPad — Token Launchpad on Base',
+    description:
+      'Launch tokens with built-in liquidity bootstrapping. Bonding curve → Uniswap V2, no upfront capital.',
+    images: ['/opengraph-image'],
+  },
+  robots: { index: true, follow: true },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
