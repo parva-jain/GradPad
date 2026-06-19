@@ -42,17 +42,29 @@ contract GradPadFactoryV2 is GradPadFactoryV1 {
 
     /// @notice Initialises V2-only storage after the upgrade.
     ///         reinitializer(2) ensures this runs exactly once on the already-initialised proxy.
+    ///         Also repairs the incorrect `uniswapV2Factory` address stored during V1 deployment
+    ///         (deploy script prepended a `0` instead of appending the missing trailing `6`).
     function initializeV2(uint256 initialFeePercent, address initialFeeRecipient) external reinitializer(2) {
         if (initialFeePercent > 500) revert FeeTooHigh();
         if (initialFeeRecipient == address(0)) revert ZeroFeeRecipient();
         platformFeePercent = initialFeePercent;
         feeRecipient       = initialFeeRecipient;
+
+        // Read the correct Uniswap V2 factory address from the router, which was deployed
+        // with the correct reference. This overwrites the bad address set during V1 init.
+        (bool ok, bytes memory data) = uniswapV2Router.staticcall(
+            abi.encodeWithSignature("factory()")
+        );
+        require(ok && data.length >= 32, "V2: router.factory() call failed");
+        address correctFactory = abi.decode(data, (address));
+        if (correctFactory == address(0)) revert ZeroAddress();
+        uniswapV2Factory = correctFactory;
     }
 
     // ============ OVERRIDDEN FUNCTIONS ============
 
     /// @notice Returns the implementation version.
-    function version() public pure override returns (string memory) {
+    function version() public pure virtual override returns (string memory) {
         return "V2";
     }
 
