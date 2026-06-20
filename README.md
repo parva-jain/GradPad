@@ -2,7 +2,7 @@
 
 GradPad is a token launchpad for meme and protocol tokens with a built-in liquidity bootstrapping mechanism — no upfront capital required. Tokens launch on a bonding curve where price is determined by supply and demand, and automatically graduate to a decentralised exchange once a funding threshold is met.
 
-**[Launch App](#)** · Built on Base
+**[Launch App](https://grad-pad.vercel.app/)** · Built on Base
 
 ---
 
